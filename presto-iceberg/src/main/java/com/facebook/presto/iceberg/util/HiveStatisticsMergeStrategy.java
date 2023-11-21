@@ -11,11 +11,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.spark.classloader_interface;
+package com.facebook.presto.iceberg.util;
 
-public enum RetryExecutionStrategy
+/**
+ * strategies that define how to merge hive column statistics into Iceberg column statistics.
+ */
+public enum HiveStatisticsMergeStrategy
 {
-    DISABLE_BROADCAST_JOIN,
-    INCREASE_CONTAINER_SIZE,
-    INCREASE_HASH_PARTITION_COUNT
+    /**
+     * Do not merge statistics from Hive
+     */
+    NONE,
+    /**
+     * Only merge NDV statistics from hive
+     */
+    USE_NDV,
+    /**
+     * Only merge null fractions from hive
+     */
+    USE_NULLS_FRACTIONS,
+    /**
+     * Merge both null fractions and NDVs from Hive
+     */
+    USE_NULLS_FRACTION_AND_NDV,
 }

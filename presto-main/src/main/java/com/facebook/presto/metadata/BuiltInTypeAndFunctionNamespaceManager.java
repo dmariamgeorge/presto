@@ -177,12 +177,14 @@ import com.facebook.presto.operator.scalar.SplitToMapFunction;
 import com.facebook.presto.operator.scalar.SplitToMultimapFunction;
 import com.facebook.presto.operator.scalar.StringFunctions;
 import com.facebook.presto.operator.scalar.TDigestFunctions;
+import com.facebook.presto.operator.scalar.ThetaSketchFunctions;
 import com.facebook.presto.operator.scalar.TryFunction;
 import com.facebook.presto.operator.scalar.TypeOfFunction;
 import com.facebook.presto.operator.scalar.UrlFunctions;
 import com.facebook.presto.operator.scalar.VarbinaryFunctions;
 import com.facebook.presto.operator.scalar.WilsonInterval;
 import com.facebook.presto.operator.scalar.WordStemFunction;
+import com.facebook.presto.operator.scalar.queryplan.JsonPrestoQueryPlanFunctions;
 import com.facebook.presto.operator.scalar.sql.ArraySqlFunctions;
 import com.facebook.presto.operator.scalar.sql.MapNormalizeFunction;
 import com.facebook.presto.operator.scalar.sql.MapSqlFunctions;
@@ -318,6 +320,7 @@ import static com.facebook.presto.metadata.SignatureBinder.applyBoundVariables;
 import static com.facebook.presto.operator.aggregation.AlternativeArbitraryAggregationFunction.ALTERNATIVE_ARBITRARY_AGGREGATION;
 import static com.facebook.presto.operator.aggregation.AlternativeMaxAggregationFunction.ALTERNATIVE_MAX;
 import static com.facebook.presto.operator.aggregation.AlternativeMinAggregationFunction.ALTERNATIVE_MIN;
+import static com.facebook.presto.operator.aggregation.ArbitraryAggregationFunction.ANY_VALUE_AGGREGATION;
 import static com.facebook.presto.operator.aggregation.ArbitraryAggregationFunction.ARBITRARY_AGGREGATION;
 import static com.facebook.presto.operator.aggregation.ChecksumAggregationFunction.CHECKSUM_AGGREGATION;
 import static com.facebook.presto.operator.aggregation.CountColumn.COUNT_COLUMN;
@@ -356,6 +359,7 @@ import static com.facebook.presto.operator.aggregation.noisyaggregation.NoisySum
 import static com.facebook.presto.operator.aggregation.noisyaggregation.NoisySumGaussianClippingAggregation.NOISY_SUM_GAUSSIAN_CLIPPING_AGGREGATION;
 import static com.facebook.presto.operator.aggregation.noisyaggregation.NoisySumGaussianClippingRandomSeedAggregation.NOISY_SUM_GAUSSIAN_CLIPPING_RANDOM_SEED_AGGREGATION;
 import static com.facebook.presto.operator.aggregation.noisyaggregation.NoisySumGaussianRandomSeedAggregation.NOISY_SUM_GAUSSIAN_RANDOM_SEED_AGGREGATION;
+import static com.facebook.presto.operator.aggregation.sketch.theta.ThetaSketchAggregationFunction.THETA_SKETCH;
 import static com.facebook.presto.operator.scalar.ArrayConcatFunction.ARRAY_CONCAT_FUNCTION;
 import static com.facebook.presto.operator.scalar.ArrayConstructor.ARRAY_CONSTRUCTOR;
 import static com.facebook.presto.operator.scalar.ArrayFlattenFunction.ARRAY_FLATTEN_FUNCTION;
@@ -729,6 +733,7 @@ public class BuiltInTypeAndFunctionNamespaceManager
                 .scalars(BitwiseFunctions.class)
                 .scalars(DateTimeFunctions.class)
                 .scalars(JsonFunctions.class)
+                .scalars(JsonPrestoQueryPlanFunctions.class)
                 .scalars(ColorFunctions.class)
                 .scalars(ColorOperators.class)
                 .scalars(GeoFunctions.class)
@@ -891,6 +896,7 @@ public class BuiltInTypeAndFunctionNamespaceManager
                 .function(CHECKSUM_AGGREGATION)
                 .function(IDENTITY_CAST)
                 .function(ARBITRARY_AGGREGATION)
+                .function(ANY_VALUE_AGGREGATION)
                 .functions(GREATEST, LEAST)
                 .functions(MAX_BY, MIN_BY, MAX_BY_N_AGGREGATION, MIN_BY_N_AGGREGATION)
                 .functions(MAX_AGGREGATION, MIN_AGGREGATION, MAX_N_AGGREGATION, MIN_N_AGGREGATION)
@@ -923,6 +929,8 @@ public class BuiltInTypeAndFunctionNamespaceManager
                 .scalars(TDigestOperators.class)
                 .scalars(TDigestFunctions.class)
                 .functions(TDIGEST_AGG, TDIGEST_AGG_WITH_WEIGHT, TDIGEST_AGG_WITH_WEIGHT_AND_COMPRESSION)
+                .function(THETA_SKETCH)
+                .scalars(ThetaSketchFunctions.class)
                 .function(MergeTDigestFunction.MERGE)
                 .sqlInvokedScalar(MapNormalizeFunction.class)
                 .sqlInvokedScalars(ArraySqlFunctions.class)

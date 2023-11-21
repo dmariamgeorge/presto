@@ -254,6 +254,7 @@ public final class SystemSessionProperties
     public static final String HISTORY_CANONICAL_PLAN_NODE_LIMIT = "history_canonical_plan_node_limit";
     public static final String HISTORY_BASED_OPTIMIZER_TIMEOUT_LIMIT = "history_based_optimizer_timeout_limit";
     public static final String RESTRICT_HISTORY_BASED_OPTIMIZATION_TO_COMPLEX_QUERY = "restrict_history_based_optimization_to_complex_query";
+    public static final String HISTORY_INPUT_TABLE_STATISTICS_MATCHING_THRESHOLD = "history_input_table_statistics_matching_threshold";
     public static final String MAX_LEAF_NODES_IN_PLAN = "max_leaf_nodes_in_plan";
     public static final String LEAF_NODE_LIMIT_ENABLED = "leaf_node_limit_enabled";
     public static final String PUSH_REMOTE_EXCHANGE_THROUGH_GROUP_ID = "push_remote_exchange_through_group_id";
@@ -292,13 +293,19 @@ public final class SystemSessionProperties
     public static final String PULL_EXPRESSION_FROM_LAMBDA_ENABLED = "pull_expression_from_lambda_enabled";
     public static final String REWRITE_CONSTANT_ARRAY_CONTAINS_TO_IN_EXPRESSION = "rewrite_constant_array_contains_to_in_expression";
     public static final String INFER_INEQUALITY_PREDICATES = "infer_inequality_predicates";
+    public static final String ENABLE_HISTORY_BASED_SCALED_WRITER = "enable_history_based_scaled_writer";
+    public static final String USE_PARTIAL_AGGREGATION_HISTORY = "use_partial_aggregation_history";
+    public static final String REMOVE_REDUNDANT_CAST_TO_VARCHAR_IN_JOIN = "remove_redundant_cast_to_varchar_in_join";
+    public static final String HANDLE_COMPLEX_EQUI_JOINS = "handle_complex_equi_joins";
 
     // TODO: Native execution related session properties that are temporarily put here. They will be relocated in the future.
     public static final String NATIVE_SIMPLIFIED_EXPRESSION_EVALUATION_ENABLED = "native_simplified_expression_evaluation_enabled";
     public static final String NATIVE_AGGREGATION_SPILL_MEMORY_THRESHOLD = "native_aggregation_spill_memory_threshold";
+    public static final String NATIVE_AGGREGATION_SPILL_ALL = "native_aggregation_spill_all";
     public static final String NATIVE_JOIN_SPILL_MEMORY_THRESHOLD = "native_join_spill_memory_threshold";
     public static final String NATIVE_ORDER_BY_SPILL_MEMORY_THRESHOLD = "native_order_by_spill_memory_threshold";
     public static final String NATIVE_MAX_SPILL_LEVEL = "native_max_spill_level";
+    public static final String NATIVE_MAX_SPILL_FILE_SIZE = "native_max_spill_file_size";
     public static final String NATIVE_SPILL_COMPRESSION_CODEC = "native_spill_compression_codec";
     public static final String NATIVE_SPILL_WRITE_BUFFER_SIZE = "native_spill_write_buffer_size";
     public static final String NATIVE_JOIN_SPILL_ENABLED = "native_join_spill_enabled";
@@ -306,6 +313,7 @@ public final class SystemSessionProperties
     public static final String NATIVE_EXECUTION_EXECUTABLE_PATH = "native_execution_executable_path";
     public static final String NATIVE_EXECUTION_PROGRAM_ARGUMENTS = "native_execution_program_arguments";
     public static final String NATIVE_EXECUTION_PROCESS_REUSE_ENABLED = "native_execution_process_reuse_enabled";
+    public static final String NATIVE_DEBUG_VALIDATE_OUTPUT_FROM_OPERATORS = "native_debug_validate_output_from_operators";
 
     private final List<PropertyMetadata<?>> sessionProperties;
 
@@ -1464,6 +1472,11 @@ public final class SystemSessionProperties
                         "Enable history based optimization only for complex queries, i.e. queries with join and aggregation",
                         true,
                         false),
+                doubleProperty(
+                        HISTORY_INPUT_TABLE_STATISTICS_MATCHING_THRESHOLD,
+                        "When the size difference between current table and history table exceed this threshold, do not match history statistics",
+                        0.0,
+                        true),
                 new PropertyMetadata<>(
                         MAX_LEAF_NODES_IN_PLAN,
                         "Maximum number of leaf nodes in the logical plan of SQL statement",
@@ -1498,6 +1511,14 @@ public final class SystemSessionProperties
                         "Native Execution only. The max memory that a final aggregation can use before spilling. If it is 0, then there is no limit",
                         0,
                         false),
+                booleanProperty(
+                        NATIVE_AGGREGATION_SPILL_ALL,
+                        "Native Execution only. If true and spilling has been triggered during the input " +
+                                "processing, the spiller will spill all the remaining in-memory state to disk before " +
+                                "output processing. This is to simplify the aggregation query OOM prevention in " +
+                                "output processing stage.",
+                        true,
+                        false),
                 integerProperty(
                         NATIVE_JOIN_SPILL_MEMORY_THRESHOLD,
                         "Native Execution only. The max memory that hash join can use before spilling. If it is 0, then there is no limit",
@@ -1513,6 +1534,11 @@ public final class SystemSessionProperties
                         "Native Execution only. The maximum allowed spilling level for hash join build.\n" +
                                 "0 is the initial spilling level, -1 means unlimited.",
                         4,
+                        false),
+                integerProperty(
+                        NATIVE_MAX_SPILL_FILE_SIZE,
+                        "The max allowed spill file size. If it is zero, then there is no limit.",
+                        0,
                         false),
                 stringProperty(
                         NATIVE_SPILL_COMPRESSION_CODEC,
@@ -1561,6 +1587,15 @@ public final class SystemSessionProperties
                         "Enable reuse the native process within the same JVM",
                         true,
                         false),
+                booleanProperty(
+                        NATIVE_DEBUG_VALIDATE_OUTPUT_FROM_OPERATORS,
+                        "If set to true, then during execution of tasks, the output vectors of " +
+                                "every operator are validated for consistency. This is an expensive check " +
+                                "so should only be used for debugging. It can help debug issues where " +
+                                "malformed vector cause failures or crashes by helping identify which " +
+                                "operator is generating them.",
+                        false,
+                        true),
                 booleanProperty(
                         RANDOMIZE_OUTER_JOIN_NULL_KEY,
                         "(Deprecated) Randomize null join key for outer join",
@@ -1732,6 +1767,26 @@ public final class SystemSessionProperties
                         INFER_INEQUALITY_PREDICATES,
                         "Infer nonequality predicates for joins",
                         featuresConfig.getInferInequalityPredicates(),
+                        false),
+                booleanProperty(
+                        ENABLE_HISTORY_BASED_SCALED_WRITER,
+                        "Enable setting the initial number of tasks for scaled writers with HBO",
+                        featuresConfig.isUseHBOForScaledWriters(),
+                        false),
+                booleanProperty(
+                        USE_PARTIAL_AGGREGATION_HISTORY,
+                        "Use collected partial aggregation statistics from HBO",
+                        featuresConfig.isUsePartialAggregationHistory(),
+                        false),
+                booleanProperty(
+                        REMOVE_REDUNDANT_CAST_TO_VARCHAR_IN_JOIN,
+                        "If both left and right side of join clause are varchar cast from int/bigint, remove the cast here",
+                        featuresConfig.isRemoveRedundantCastToVarcharInJoin(),
+                        false),
+                booleanProperty(
+                        HANDLE_COMPLEX_EQUI_JOINS,
+                        "Handle complex equi-join conditions to open up join space for join reordering",
+                        featuresConfig.getHandleComplexEquiJoins(),
                         false));
     }
 
@@ -2743,6 +2798,11 @@ public final class SystemSessionProperties
         return session.getSystemProperty(RESTRICT_HISTORY_BASED_OPTIMIZATION_TO_COMPLEX_QUERY, Boolean.class);
     }
 
+    public static double getHistoryInputTableStatisticsMatchingThreshold(Session session)
+    {
+        return session.getSystemProperty(HISTORY_INPUT_TABLE_STATISTICS_MATCHING_THRESHOLD, Double.class);
+    }
+
     public static boolean shouldPushRemoteExchangeThroughGroupId(Session session)
     {
         return session.getSystemProperty(PUSH_REMOTE_EXCHANGE_THROUGH_GROUP_ID, Boolean.class);
@@ -2900,5 +2960,25 @@ public final class SystemSessionProperties
     public static boolean shouldInferInequalityPredicates(Session session)
     {
         return session.getSystemProperty(INFER_INEQUALITY_PREDICATES, Boolean.class);
+    }
+
+    public static boolean useHistoryBasedScaledWriters(Session session)
+    {
+        return session.getSystemProperty(ENABLE_HISTORY_BASED_SCALED_WRITER, Boolean.class);
+    }
+
+    public static boolean usePartialAggregationHistory(Session session)
+    {
+        return session.getSystemProperty(USE_PARTIAL_AGGREGATION_HISTORY, Boolean.class);
+    }
+
+    public static boolean isRemoveRedundantCastToVarcharInJoinEnabled(Session session)
+    {
+        return session.getSystemProperty(REMOVE_REDUNDANT_CAST_TO_VARCHAR_IN_JOIN, Boolean.class);
+    }
+
+    public static boolean shouldHandleComplexEquiJoins(Session session)
+    {
+        return session.getSystemProperty(HANDLE_COMPLEX_EQUI_JOINS, Boolean.class);
     }
 }

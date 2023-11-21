@@ -79,6 +79,7 @@ public class TestFeaturesConfig
                 .setMaxReorderedJoins(9)
                 .setUseHistoryBasedPlanStatistics(false)
                 .setTrackHistoryBasedPlanStatistics(false)
+                .setUsePartialAggregationHistory(false)
                 .setUsePerfectlyConsistentHistories(false)
                 .setHistoryCanonicalPlanNodeLimit(1000)
                 .setHistoryBasedOptimizerTimeout(new Duration(10, SECONDS))
@@ -246,7 +247,10 @@ public class TestFeaturesConfig
                 .setAddPartialNodeForRowNumberWithLimitEnabled(true)
                 .setInferInequalityPredicates(false)
                 .setPullUpExpressionFromLambdaEnabled(false)
-                .setRewriteConstantArrayContainsToInEnabled(false));
+                .setRewriteConstantArrayContainsToInEnabled(false)
+                .setUseHBOForScaledWriters(false)
+                .setRemoveRedundantCastToVarcharInJoin(true)
+                .setHandleComplexEquiJoins(false));
     }
 
     @Test
@@ -294,6 +298,7 @@ public class TestFeaturesConfig
                 .put("optimizer.max-reordered-joins", "5")
                 .put("optimizer.use-history-based-plan-statistics", "true")
                 .put("optimizer.track-history-based-plan-statistics", "true")
+                .put("optimizer.use-partial-aggregation-history", "true")
                 .put("optimizer.use-perfectly-consistent-histories", "true")
                 .put("optimizer.history-canonical-plan-node-limit", "2")
                 .put("optimizer.history-based-optimizer-timeout", "1s")
@@ -441,6 +446,9 @@ public class TestFeaturesConfig
                 .put("optimizer.infer-inequality-predicates", "true")
                 .put("optimizer.pull-up-expression-from-lambda", "true")
                 .put("optimizer.rewrite-constant-array-contains-to-in", "true")
+                .put("optimizer.use-hbo-for-scaled-writers", "true")
+                .put("optimizer.remove-redundant-cast-to-varchar-in-join", "false")
+                .put("optimizer.handle-complex-equi-joins", "true")
                 .build();
 
         FeaturesConfig expected = new FeaturesConfig()
@@ -476,6 +484,7 @@ public class TestFeaturesConfig
                 .setMaxReorderedJoins(5)
                 .setUseHistoryBasedPlanStatistics(true)
                 .setTrackHistoryBasedPlanStatistics(true)
+                .setUsePartialAggregationHistory(true)
                 .setUsePerfectlyConsistentHistories(true)
                 .setHistoryCanonicalPlanNodeLimit(2)
                 .setHistoryBasedOptimizerTimeout(new Duration(1, SECONDS))
@@ -632,7 +641,10 @@ public class TestFeaturesConfig
                 .setAddPartialNodeForRowNumberWithLimitEnabled(false)
                 .setInferInequalityPredicates(true)
                 .setPullUpExpressionFromLambdaEnabled(true)
-                .setRewriteConstantArrayContainsToInEnabled(true);
+                .setRewriteConstantArrayContainsToInEnabled(true)
+                .setUseHBOForScaledWriters(true)
+                .setRemoveRedundantCastToVarcharInJoin(false)
+                .setHandleComplexEquiJoins(true);
         assertFullMapping(properties, expected);
     }
 

@@ -86,7 +86,10 @@ void PeriodicTaskManager::start() {
 
   VELOX_CHECK_NOT_NULL(taskManager_);
   addTaskStatsTask();
-  addOldTaskCleanupTask();
+
+  if (SystemConfig::instance()->enableOldTaskCleanUp()) {
+    addOldTaskCleanupTask();
+  }
 
   if (memoryAllocator_ != nullptr) {
     addMemoryAllocatorStatsTask();
@@ -178,9 +181,7 @@ void PeriodicTaskManager::updateTaskStats() {
       kCounterNumBlockedDrivers, driverCountStats.numBlockedDrivers);
   REPORT_ADD_STAT_VALUE(
       kCounterTotalPartitionedOutputBuffer,
-      velox::exec::PartitionedOutputBufferManager::getInstance()
-          .lock()
-          ->numBuffers());
+      velox::exec::OutputBufferManager::getInstance().lock()->numBuffers());
 }
 
 void PeriodicTaskManager::addTaskStatsTask() {
@@ -543,6 +544,10 @@ void PeriodicTaskManager::updateArbitratorStatsTask() {
   REPORT_IF_NOT_ZERO(
       kCounterArbitratorFreeCapacityBytes,
       deltaArbitratorStats.freeCapacityBytes);
+  REPORT_IF_NOT_ZERO(
+      kCounterArbitratorNonReclaimableAttempts,
+      deltaArbitratorStats.numNonReclaimableAttempts);
+
   if (!deltaArbitratorStats.empty()) {
     LOG(INFO) << "Updated memory arbitrator stats: "
               << updatedArbitratorStats.toString();
@@ -577,12 +582,16 @@ void PeriodicTaskManager::updateSpillStatsTask() {
       kCounterSpillFlushTimeUs, deltaSpillStats.spillFlushTimeUs);
   REPORT_IF_NOT_ZERO(
       kCounterSpillWriteTimeUs, deltaSpillStats.spillWriteTimeUs);
+  REPORT_IF_NOT_ZERO(
+      kCounterSpillMaxLevelExceeded,
+      deltaSpillStats.spillMaxLevelExceededCount);
+
   if (!deltaSpillStats.empty()) {
     LOG(INFO) << "Updated spill stats: " << updatedSpillStats.toString();
     LOG(INFO) << "Spill stats change:" << deltaSpillStats.toString();
   }
 
-  const auto spillMemoryStats = velox::exec::Spiller::pool()->stats();
+  const auto spillMemoryStats = velox::memory::spillMemoryPool()->stats();
   LOG(INFO) << "Spill memory usage: current["
             << velox::succinctBytes(spillMemoryStats.currentBytes) << "] peak["
             << velox::succinctBytes(spillMemoryStats.peakBytes) << "]";

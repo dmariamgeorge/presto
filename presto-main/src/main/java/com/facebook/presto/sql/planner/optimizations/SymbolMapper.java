@@ -184,7 +184,8 @@ public class SymbolMapper
                 mapAndDistinctVariable(node.getPreGroupedVariables()),
                 node.getStep(),
                 node.getHashVariable().map(this::map),
-                node.getGroupIdVariable().map(this::map));
+                node.getGroupIdVariable().map(this::map),
+                node.getAggregationId());
     }
 
     private Aggregation map(Aggregation aggregation)
@@ -252,7 +253,8 @@ public class SymbolMapper
                 node.getNotNullColumnVariables(),
                 node.getTablePartitioningScheme().map(partitioningScheme -> canonicalize(partitioningScheme, source)),
                 node.getPreferredShufflePartitioningScheme().map(partitioningScheme -> canonicalize(partitioningScheme, source)),
-                node.getStatisticsAggregation().map(this::map));
+                node.getStatisticsAggregation().map(this::map),
+                node.getTaskCountIfScaledWriter());
     }
 
     public StatisticsWriterNode map(StatisticsWriterNode node, PlanNode source)

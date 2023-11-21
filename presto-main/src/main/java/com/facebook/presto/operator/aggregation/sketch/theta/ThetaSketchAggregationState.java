@@ -11,23 +11,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.nativeworker;
+package com.facebook.presto.operator.aggregation.sketch.theta;
 
-import com.facebook.presto.testing.ExpectedQueryRunner;
-import com.facebook.presto.testing.QueryRunner;
+import com.facebook.presto.spi.function.AccumulatorStateMetadata;
+import org.apache.datasketches.theta.Union;
 
-public class TestPrestoNativeScaledWriter
-        extends AbstractTestScaledWriter
+@AccumulatorStateMetadata(stateSerializerClass = ThetaSketchStateSerializer.class, stateFactoryClass = ThetaSketchStateFactory.class)
+public interface ThetaSketchAggregationState
 {
-    @Override
-    protected QueryRunner createQueryRunner() throws Exception
-    {
-        return PrestoNativeQueryRunnerUtils.createNativeQueryRunner(false);
-    }
+    Union getSketch();
 
-    @Override
-    protected ExpectedQueryRunner createExpectedQueryRunner() throws Exception
-    {
-        return PrestoNativeQueryRunnerUtils.createJavaQueryRunner();
-    }
+    void setSketch(Union value);
 }

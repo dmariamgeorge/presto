@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.iceberg;
 
+import com.facebook.presto.iceberg.util.HiveStatisticsMergeStrategy;
 import com.google.common.collect.ImmutableMap;
 import org.testng.annotations.Test;
 
@@ -27,6 +28,7 @@ import static com.facebook.presto.iceberg.CatalogType.HADOOP;
 import static com.facebook.presto.iceberg.CatalogType.HIVE;
 import static com.facebook.presto.iceberg.IcebergFileFormat.ORC;
 import static com.facebook.presto.iceberg.IcebergFileFormat.PARQUET;
+import static com.facebook.presto.iceberg.util.HiveStatisticsMergeStrategy.USE_NDV;
 
 public class TestIcebergConfig
 {
@@ -40,6 +42,8 @@ public class TestIcebergConfig
                 .setCatalogWarehouse(null)
                 .setCatalogCacheSize(10)
                 .setHadoopConfigResources(null)
+                .setHiveStatisticsMergeStrategy(HiveStatisticsMergeStrategy.NONE)
+                .setStatisticSnapshotRecordDifferenceWeight(0.0)
                 .setMaxPartitionsPerWriter(100)
                 .setMinimumAssignedSplitWeight(0.05)
                 .setParquetDereferencePushdownEnabled(true)
@@ -60,6 +64,8 @@ public class TestIcebergConfig
                 .put("iceberg.minimum-assigned-split-weight", "0.01")
                 .put("iceberg.enable-parquet-dereference-pushdown", "false")
                 .put("iceberg.enable-merge-on-read-mode", "true")
+                .put("iceberg.statistic-snapshot-record-difference-weight", "1.0")
+                .put("iceberg.hive-statistics-merge-strategy", "USE_NDV")
                 .build();
 
         IcebergConfig expected = new IcebergConfig()
@@ -71,8 +77,10 @@ public class TestIcebergConfig
                 .setHadoopConfigResources("/etc/hadoop/conf/core-site.xml")
                 .setMaxPartitionsPerWriter(222)
                 .setMinimumAssignedSplitWeight(0.01)
+                .setStatisticSnapshotRecordDifferenceWeight(1.0)
                 .setParquetDereferencePushdownEnabled(false)
-                .setMergeOnReadModeEnabled(true);
+                .setMergeOnReadModeEnabled(true)
+                .setHiveStatisticsMergeStrategy(USE_NDV);
 
         assertFullMapping(properties, expected);
     }

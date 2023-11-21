@@ -27,7 +27,8 @@ class RowExpressionTest : public ::testing::Test {
  public:
   void SetUp() override {
     pool_ = memory::addDefaultLeafMemoryPool();
-    converter_ = std::make_unique<VeloxExprConverter>(pool_.get());
+    converter_ =
+        std::make_unique<VeloxExprConverter>(pool_.get(), &typeParser_);
   }
 
   void testConstantExpression(
@@ -46,6 +47,7 @@ class RowExpressionTest : public ::testing::Test {
 
   std::shared_ptr<memory::MemoryPool> pool_;
   std::unique_ptr<VeloxExprConverter> converter_;
+  TypeParser typeParser_;
 };
 
 TEST_F(RowExpressionTest, bigInt) {
@@ -479,7 +481,7 @@ TEST_F(RowExpressionTest, call) {
     {
       auto cexpr = std::static_pointer_cast<const ConstantTypedExpr>(iexpr[1]);
       ASSERT_EQ(cexpr->type()->toString(), "VARCHAR");
-      ASSERT_EQ(cexpr->value().toJson(), "\"foo\"");
+      ASSERT_EQ(cexpr->value().toJson(cexpr->type()), "\"foo\"");
     }
   }
 }
@@ -585,7 +587,7 @@ TEST_F(RowExpressionTest, special) {
       auto cexpr = std::static_pointer_cast<const ConstantTypedExpr>(
           arg0expr->inputs()[1]);
       ASSERT_EQ(cexpr->type()->toString(), "BIGINT");
-      ASSERT_EQ(cexpr->value().toJson(), "10");
+      ASSERT_EQ(cexpr->value().toJson(cexpr->type()), "10");
     }
   }
 
@@ -605,7 +607,7 @@ TEST_F(RowExpressionTest, special) {
       auto cexpr = std::static_pointer_cast<const ConstantTypedExpr>(
           arg1expr->inputs()[1]);
       ASSERT_EQ(cexpr->type()->toString(), "VARCHAR");
-      ASSERT_EQ(cexpr->value().toJson(), "\"foo\"");
+      ASSERT_EQ(cexpr->value().toJson(cexpr->type()), "\"foo\"");
     }
   }
 }

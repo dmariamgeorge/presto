@@ -93,13 +93,21 @@ std::unique_ptr<Result> createTimeOutResult(long token) {
   return result;
 }
 
+std::unique_ptr<Result> createCompleteResult(long token) {
+  auto result = std::make_unique<Result>();
+  result->sequence = result->nextSequence = token;
+  result->data = folly::IOBuf::create(0);
+  result->complete = true;
+  return result;
+}
+
 void getData(
     PromiseHolderPtr<std::unique_ptr<Result>> promiseHolder,
     const TaskId& taskId,
-    long bufferId,
+    long destination,
     long token,
     protocol::DataSize maxSize,
-    exec::PartitionedOutputBufferManager& bufferManager) {
+    exec::OutputBufferManager& bufferManager) {
   if (promiseHolder == nullptr) {
     // promise/future is expired.
     return;
@@ -108,10 +116,10 @@ void getData(
   int64_t startMs = getCurrentTimeMs();
   auto bufferFound = bufferManager.getData(
       taskId,
-      bufferId,
+      destination,
       maxSize.getValue(protocol::DataUnit::BYTE),
       token,
-      [taskId = taskId, bufferId = bufferId, promiseHolder, startMs](
+      [taskId = taskId, bufferId = destination, promiseHolder, startMs](
           std::vector<std::unique_ptr<folly::IOBuf>> pages,
           int64_t sequence) mutable {
         bool complete = pages.empty();
@@ -155,7 +163,7 @@ void getData(
 
   if (!bufferFound) {
     // Buffer was erased for current TaskId.
-    VLOG(1) << "Task " << taskId << ", buffer " << bufferId << ", sequence "
+    VLOG(1) << "Task " << taskId << ", buffer " << destination << ", sequence "
             << token << ", buffer not found.";
     promiseHolder->promise.setValue(std::move(createTimeOutResult(token)));
   }
@@ -256,7 +264,7 @@ struct ZombieTaskStatsSet {
                << numCanceled << "] ABORTED[" << numAborted << "] FAILED["
                << numFailed << "]  Sample task IDs (shows only "
                << numSampleTasks << " IDs): " << std::endl;
-    for (int i = 0; i < tasks.size(); ++i) {
+    for (auto i = 0; i < tasks.size(); ++i) {
       LOG(ERROR) << "Zombie Task[" << i + 1 << "/" << tasks.size()
                  << "]: " << tasks[i].toString() << std::endl;
     }
@@ -264,11 +272,16 @@ struct ZombieTaskStatsSet {
 };
 } // namespace
 
-TaskManager::TaskManager()
-    : bufferManager_(
-          velox::exec::PartitionedOutputBufferManager::getInstance().lock()) {
-  VELOX_CHECK_NOT_NULL(
-      bufferManager_, "invalid PartitionedOutputBufferManager");
+TaskManager::TaskManager(
+    folly::Executor* driverExecutor,
+    folly::Executor* httpSrvCpuExecutor,
+    folly::Executor* spillerExecutor)
+    : bufferManager_(velox::exec::OutputBufferManager::getInstance().lock()),
+      queryContextManager_(std::make_unique<QueryContextManager>(
+          driverExecutor,
+          spillerExecutor)),
+      httpSrvCpuExecutor_(httpSrvCpuExecutor) {
+  VELOX_CHECK_NOT_NULL(bufferManager_, "invalid OutputBufferManager");
 }
 
 void TaskManager::setBaseUri(const std::string& baseUri) {
@@ -300,7 +313,7 @@ TaskMap TaskManager::tasks() const {
 }
 
 const QueryContextManager* TaskManager::getQueryContextManager() const {
-  return &queryContextManager_;
+  return queryContextManager_.get();
 }
 
 void TaskManager::abortResults(const TaskId& taskId, long bufferId) {
@@ -493,7 +506,7 @@ std::unique_ptr<TaskInfo> TaskManager::createOrUpdateTask(
       LOG(INFO) << "Starting task " << taskId << " with " << maxDrivers
                 << " max drivers.";
     }
-    exec::Task::start(execTask, maxDrivers, concurrentLifespans);
+    execTask->start(maxDrivers, concurrentLifespans);
 
     prestoTask->taskStarted = true;
     resultRequests = std::move(prestoTask->resultRequests);
@@ -611,23 +624,31 @@ size_t TaskManager::cleanOldTasks() {
 
   ZombieTaskStatsSet zombieVeloxTaskCounts;
   ZombieTaskStatsSet zombiePrestoTaskCounts;
+  uint32_t numTasksWithStuckOperator{0};
   {
     // We copy task map locally to avoid locking task map for a potentially long
     // time. We also lock for 'read'.
-    TaskMap taskMap = *(taskMap_.rlock());
+    const TaskMap taskMap = *(taskMap_.rlock());
 
-    for (auto it = taskMap.begin(); it != taskMap.end(); ++it) {
+    for (const auto& [id, prestoTask] : taskMap) {
+      if (prestoTask->hasStuckOperator) {
+        ++numTasksWithStuckOperator;
+      }
+
       bool eraseTask{false};
-      if (it->second->task != nullptr) {
-        if (it->second->task->state() != exec::TaskState::kRunning) {
-          if (it->second->task->timeSinceEndMs() >= oldTaskCleanUpMs_) {
+      if (prestoTask->task != nullptr) {
+        if (prestoTask->task->state() != exec::TaskState::kRunning) {
+          // Since the state is not running, we know the task has been
+          // terminated. We use termination time instead of end time as the
+          // former does not include time waiting for results to be consumed.
+          if (prestoTask->task->timeSinceTerminationMs() >= oldTaskCleanUpMs_) {
             // Not running and old.
             eraseTask = true;
           }
         }
       } else {
         // Use heartbeat to determine the task's age.
-        if (it->second->timeSinceLastHeartbeatMs() >= oldTaskCleanUpMs_) {
+        if (prestoTask->timeSinceLastHeartbeatMs() >= oldTaskCleanUpMs_) {
           eraseTask = true;
         }
       }
@@ -637,15 +658,15 @@ size_t TaskManager::cleanOldTasks() {
         continue;
       }
 
-      const auto prestoTaskRefCount = it->second.use_count();
-      const auto taskRefCount = it->second->task.use_count();
+      const auto prestoTaskRefCount = prestoTask.use_count();
+      const auto taskRefCount = prestoTask->task.use_count();
 
       // Do not remove 'zombie' tasks (with outstanding references) from the
       // map. We use it to track the number of tasks. Note, since we copied the
       // task map, presto tasks should have an extra reference (2 from two
       // maps).
       if (prestoTaskRefCount > 2 || taskRefCount > 1) {
-        auto& task = it->second->task;
+        auto& task = prestoTask->task;
         if (prestoTaskRefCount > 2) {
           ++zombiePrestoTaskCounts.numTotal;
           if (task != nullptr) {
@@ -657,7 +678,7 @@ size_t TaskManager::cleanOldTasks() {
           zombieVeloxTaskCounts.updateCounts(task);
         }
       } else {
-        taskIdsToClean.emplace(it->first);
+        taskIdsToClean.emplace(id);
       }
     }
   }
@@ -692,6 +713,8 @@ size_t TaskManager::cleanOldTasks() {
       kCounterNumZombieVeloxTasks, zombieVeloxTaskCounts.numTotal);
   REPORT_ADD_STAT_VALUE(
       kCounterNumZombiePrestoTasks, zombiePrestoTaskCounts.numTotal);
+  REPORT_ADD_STAT_VALUE(
+      kCounterNumTasksWithStuckOperator, numTasksWithStuckOperator);
   return taskIdsToClean.size();
 }
 
@@ -701,7 +724,6 @@ folly::Future<std::unique_ptr<protocol::TaskInfo>> TaskManager::getTaskInfo(
     std::optional<protocol::TaskState> currentState,
     std::optional<protocol::Duration> maxWait,
     std::shared_ptr<http::CallbackRequestHandlerState> state) {
-  auto eventBase = folly::EventBaseManager::get()->getEventBase();
   auto [promise, future] =
       folly::makePromiseContract<std::unique_ptr<protocol::TaskInfo>>();
   auto prestoTask = findOrCreateTask(taskId);
@@ -709,7 +731,7 @@ folly::Future<std::unique_ptr<protocol::TaskInfo>> TaskManager::getTaskInfo(
     // Return current TaskInfo without waiting.
     promise.setValue(
         std::make_unique<protocol::TaskInfo>(prestoTask->updateInfo()));
-    return std::move(future).via(eventBase);
+    return std::move(future).via(httpSrvCpuExecutor_);
   }
 
   uint64_t maxWaitMicros =
@@ -725,8 +747,9 @@ folly::Future<std::unique_ptr<protocol::TaskInfo>> TaskManager::getTaskInfo(
       keepPromiseAlive(promiseHolder, state);
       prestoTask->infoRequest = folly::to_weak_ptr(promiseHolder);
 
-      return std::move(future).via(eventBase).onTimeout(
-          std::chrono::microseconds(maxWaitMicros), [prestoTask]() {
+      return std::move(future)
+          .via(httpSrvCpuExecutor_)
+          .onTimeout(std::chrono::microseconds(maxWaitMicros), [prestoTask]() {
             return std::make_unique<protocol::TaskInfo>(
                 prestoTask->updateInfo());
           });
@@ -736,7 +759,7 @@ folly::Future<std::unique_ptr<protocol::TaskInfo>> TaskManager::getTaskInfo(
   if (currentState.value() != info.taskStatus.state ||
       isFinalState(info.taskStatus.state)) {
     promise.setValue(std::make_unique<protocol::TaskInfo>(info));
-    return std::move(future).via(eventBase);
+    return std::move(future).via(httpSrvCpuExecutor_);
   }
 
   auto promiseHolder =
@@ -744,7 +767,7 @@ folly::Future<std::unique_ptr<protocol::TaskInfo>> TaskManager::getTaskInfo(
           std::move(promise));
 
   prestoTask->task->stateChangeFuture(maxWaitMicros)
-      .via(eventBase)
+      .via(httpSrvCpuExecutor_)
       .thenValue([promiseHolder, prestoTask](auto&& /*done*/) {
         promiseHolder->promise.setValue(
             std::make_unique<protocol::TaskInfo>(prestoTask->updateInfo()));
@@ -756,20 +779,20 @@ folly::Future<std::unique_ptr<protocol::TaskInfo>> TaskManager::getTaskInfo(
             promiseHolder->promise.setValue(
                 std::make_unique<protocol::TaskInfo>(prestoTask->updateInfo()));
           });
-  return std::move(future).via(eventBase);
+  return std::move(future).via(httpSrvCpuExecutor_);
 }
 
 folly::Future<std::unique_ptr<Result>> TaskManager::getResults(
     const TaskId& taskId,
-    long bufferId,
+    long destination,
     long token,
     protocol::DataSize maxSize,
     protocol::Duration maxWait,
     std::shared_ptr<http::CallbackRequestHandlerState> state) {
   uint64_t maxWaitMicros =
       std::max(1.0, maxWait.getValue(protocol::TimeUnit::MICROSECONDS));
-  VLOG(1) << "TaskManager::getResults " << taskId << ", " << bufferId << ", "
-          << token;
+  VLOG(1) << "TaskManager::getResults task:" << taskId
+          << ", destination:" << destination << ", token:" << token;
   auto [promise, future] =
       folly::makePromiseContract<std::unique_ptr<Result>>();
 
@@ -792,7 +815,6 @@ folly::Future<std::unique_ptr<Result>> TaskManager::getResults(
 
   auto timeoutFn = [this, token]() { return createTimeOutResult(token); };
 
-  auto eventBase = folly::EventBaseManager::get()->getEventBase();
   try {
     auto prestoTask = findOrCreateTask(taskId);
 
@@ -822,41 +844,54 @@ folly::Future<std::unique_ptr<Result>> TaskManager::getResults(
 
     for (;;) {
       if (prestoTask->taskStarted) {
+        // If the task has finished, then send completion result.
+        if (prestoTask->task->state() == exec::kFinished) {
+          promiseHolder->promise.setValue(createCompleteResult(token));
+          return std::move(future).via(httpSrvCpuExecutor_);
+        }
         // If task is not running let the request timeout. The task may have
         // failed at creation time and the coordinator hasn't yet caught up.
         if (prestoTask->task->state() == exec::kRunning) {
           getData(
-              promiseHolder, taskId, bufferId, token, maxSize, *bufferManager_);
+              promiseHolder,
+              taskId,
+              destination,
+              token,
+              maxSize,
+              *bufferManager_);
         }
-        return std::move(future).via(eventBase).onTimeout(
-            std::chrono::microseconds(maxWaitMicros), timeoutFn);
+        return std::move(future)
+            .via(httpSrvCpuExecutor_)
+            .onTimeout(std::chrono::microseconds(maxWaitMicros), timeoutFn);
       }
+
       std::lock_guard<std::mutex> l(prestoTask->mutex);
       if (prestoTask->taskStarted) {
         continue;
       }
       // The task is not started yet, put the request
-      VLOG(1) << "Queuing up result request for task " << taskId << ", buffer "
-              << bufferId << ", sequence " << token;
+      VLOG(1) << "Queuing up result request for task " << taskId
+              << ", destination " << destination << ", sequence " << token;
 
       keepPromiseAlive(promiseHolder, state);
 
       auto request = std::make_unique<ResultRequest>();
       request->promise = folly::to_weak_ptr(promiseHolder);
       request->taskId = taskId;
-      request->bufferId = bufferId;
+      request->bufferId = destination;
       request->token = token;
       request->maxSize = maxSize;
-      prestoTask->resultRequests.insert({bufferId, std::move(request)});
-      return std::move(future).via(eventBase).onTimeout(
-          std::chrono::microseconds(maxWaitMicros), timeoutFn);
+      prestoTask->resultRequests.insert({destination, std::move(request)});
+      return std::move(future)
+          .via(httpSrvCpuExecutor_)
+          .onTimeout(std::chrono::microseconds(maxWaitMicros), timeoutFn);
     }
   } catch (const velox::VeloxException& e) {
     promiseHolder->promise.setException(e);
-    return std::move(future).via(eventBase);
+    return std::move(future).via(httpSrvCpuExecutor_);
   } catch (const std::exception& e) {
     promiseHolder->promise.setException(e);
-    return std::move(future).via(eventBase);
+    return std::move(future).via(httpSrvCpuExecutor_);
   }
 }
 
@@ -865,7 +900,6 @@ folly::Future<std::unique_ptr<protocol::TaskStatus>> TaskManager::getTaskStatus(
     std::optional<protocol::TaskState> currentState,
     std::optional<protocol::Duration> maxWait,
     std::shared_ptr<http::CallbackRequestHandlerState> state) {
-  auto eventBase = folly::EventBaseManager::get()->getEventBase();
   auto [promise, future] =
       folly::makePromiseContract<std::unique_ptr<protocol::TaskStatus>>();
 
@@ -889,8 +923,9 @@ folly::Future<std::unique_ptr<protocol::TaskStatus>> TaskManager::getTaskStatus(
 
       keepPromiseAlive(promiseHolder, state);
       prestoTask->statusRequest = folly::to_weak_ptr(promiseHolder);
-      return std::move(future).via(eventBase).onTimeout(
-          std::chrono::microseconds(maxWaitMicros), [prestoTask]() {
+      return std::move(future)
+          .via(httpSrvCpuExecutor_)
+          .onTimeout(std::chrono::microseconds(maxWaitMicros), [prestoTask]() {
             return std::make_unique<protocol::TaskStatus>(
                 prestoTask->updateStatus());
           });
@@ -901,7 +936,7 @@ folly::Future<std::unique_ptr<protocol::TaskStatus>> TaskManager::getTaskStatus(
 
   if (currentState.value() != status.state || isFinalState(status.state)) {
     promise.setValue(std::make_unique<protocol::TaskStatus>(status));
-    return std::move(future).via(eventBase);
+    return std::move(future).via(httpSrvCpuExecutor_);
   }
 
   auto promiseHolder =
@@ -909,7 +944,7 @@ folly::Future<std::unique_ptr<protocol::TaskStatus>> TaskManager::getTaskStatus(
           std::move(promise));
 
   prestoTask->task->stateChangeFuture(maxWaitMicros)
-      .via(eventBase)
+      .via(httpSrvCpuExecutor_)
       .thenValue([promiseHolder, prestoTask](auto&& /*done*/) {
         promiseHolder->promise.setValue(
             std::make_unique<protocol::TaskStatus>(prestoTask->updateStatus()));
@@ -922,7 +957,7 @@ folly::Future<std::unique_ptr<protocol::TaskStatus>> TaskManager::getTaskStatus(
                 std::make_unique<protocol::TaskStatus>(
                     prestoTask->updateStatus()));
           });
-  return std::move(future).via(eventBase);
+  return std::move(future).via(httpSrvCpuExecutor_);
 }
 
 void TaskManager::removeRemoteSource(

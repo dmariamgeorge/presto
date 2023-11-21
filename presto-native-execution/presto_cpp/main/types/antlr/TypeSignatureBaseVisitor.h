@@ -13,7 +13,7 @@
  */
 
 #include <boost/algorithm/string.hpp>
-#include "presto_cpp/main/types/TypeSignatureTypeConverter.h"
+#include "presto_cpp/main/types/TypeParser.h"
 
 // Generated from TypeSignature.g4 by ANTLR 4.9.3
 
@@ -83,6 +83,11 @@ class TypeSignatureBaseVisitor : public TypeSignatureVisitor {
 
   virtual antlrcpp::Any visitArray_type(
       TypeSignatureParser::Array_typeContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual antlrcpp::Any visitFunction_type(
+      TypeSignatureParser::Function_typeContext* ctx) override {
     return visitChildren(ctx);
   }
 

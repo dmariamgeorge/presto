@@ -99,6 +99,7 @@ import com.facebook.presto.sql.planner.iterative.rule.RemoveEmptyDelete;
 import com.facebook.presto.sql.planner.iterative.rule.RemoveFullSample;
 import com.facebook.presto.sql.planner.iterative.rule.RemoveIdentityProjectionsBelowProjection;
 import com.facebook.presto.sql.planner.iterative.rule.RemoveRedundantAggregateDistinct;
+import com.facebook.presto.sql.planner.iterative.rule.RemoveRedundantCastToVarcharInJoinClause;
 import com.facebook.presto.sql.planner.iterative.rule.RemoveRedundantDistinct;
 import com.facebook.presto.sql.planner.iterative.rule.RemoveRedundantDistinctLimit;
 import com.facebook.presto.sql.planner.iterative.rule.RemoveRedundantIdentityProjections;
@@ -117,6 +118,7 @@ import com.facebook.presto.sql.planner.iterative.rule.RewriteConstantArrayContai
 import com.facebook.presto.sql.planner.iterative.rule.RewriteFilterWithExternalFunctionToProject;
 import com.facebook.presto.sql.planner.iterative.rule.RewriteSpatialPartitioningAggregation;
 import com.facebook.presto.sql.planner.iterative.rule.RuntimeReorderJoinSides;
+import com.facebook.presto.sql.planner.iterative.rule.ScaledWriterRule;
 import com.facebook.presto.sql.planner.iterative.rule.SimplifyCardinalityMap;
 import com.facebook.presto.sql.planner.iterative.rule.SimplifyCountOverConstant;
 import com.facebook.presto.sql.planner.iterative.rule.SimplifyRowExpressions;
@@ -400,6 +402,12 @@ public class PlanOptimizers
                                 new ImplementBernoulliSampleAsFilter(metadata.getFunctionAndTypeManager()),
                                 new ImplementOffset(metadata.getFunctionAndTypeManager()))),
                 simplifyRowExpressionOptimizer,
+                new IterativeOptimizer(
+                        metadata,
+                        ruleStats,
+                        statsCalculator,
+                        estimatedExchangesCostCalculator,
+                        ImmutableSet.of(new RemoveTrivialFilters())),
                 new UnaliasSymbolReferences(metadata.getFunctionAndTypeManager()),
                 new IterativeOptimizer(
                         metadata,
@@ -458,6 +466,12 @@ public class PlanOptimizers
                                 new RemoveRedundantIdentityProjections(),
                                 new TransformCorrelatedSingleRowSubqueryToProject())),
                 new CheckSubqueryNodesAreRewritten(),
+                new IterativeOptimizer(
+                        metadata,
+                        ruleStats,
+                        statsCalculator,
+                        estimatedExchangesCostCalculator,
+                        ImmutableSet.of(new RemoveRedundantCastToVarcharInJoinClause(metadata.getFunctionAndTypeManager()))),
                 new IterativeOptimizer(
                         metadata,
                         ruleStats,
@@ -705,6 +719,14 @@ public class PlanOptimizers
                         .build()));
 
         builder.add(new RemoveRedundantDistinctAggregation());
+
+        builder.add(
+                new IterativeOptimizer(
+                        metadata,
+                        ruleStats,
+                        statsCalculator,
+                        costCalculator,
+                        ImmutableSet.of(new ScaledWriterRule())));
 
         if (!forceSingleNode) {
             builder.add(new ReplicateSemiJoinInDelete()); // Must run before AddExchanges

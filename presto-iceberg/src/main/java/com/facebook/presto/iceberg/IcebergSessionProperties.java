@@ -19,11 +19,13 @@ import com.facebook.presto.hive.HiveCompressionCodec;
 import com.facebook.presto.hive.OrcFileWriterConfig;
 import com.facebook.presto.hive.ParquetFileWriterConfig;
 import com.facebook.presto.iceberg.nessie.NessieConfig;
+import com.facebook.presto.iceberg.util.HiveStatisticsMergeStrategy;
 import com.facebook.presto.orc.OrcWriteValidation;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.schedule.NodeSelectionStrategy;
 import com.facebook.presto.spi.session.PropertyMetadata;
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import io.airlift.units.DataSize;
 import org.apache.parquet.column.ParquetProperties;
@@ -81,6 +83,9 @@ public final class IcebergSessionProperties
     public static final String READ_MASKED_VALUE_ENABLED = "read_null_masked_parquet_encrypted_value_enabled";
     public static final String PARQUET_DEREFERENCE_PUSHDOWN_ENABLED = "parquet_dereference_pushdown_enabled";
     public static final String MERGE_ON_READ_MODE_ENABLED = "merge_on_read_enabled";
+    public static final String HIVE_METASTORE_STATISTICS_MERGE_STRATEGY = "hive_statistics_merge_strategy";
+    public static final String STATISTIC_SNAPSHOT_RECORD_DIFFERENCE_WEIGHT = "statistic_snapshot_record_difference_weight";
+
     private final List<PropertyMetadata<?>> sessionProperties;
 
     @Inject
@@ -290,6 +295,23 @@ public final class IcebergSessionProperties
                         MERGE_ON_READ_MODE_ENABLED,
                         "Reads enabled for merge-on-read Iceberg tables",
                         icebergConfig.isMergeOnReadModeEnabled(),
+                        false),
+                new PropertyMetadata<>(
+                        HIVE_METASTORE_STATISTICS_MERGE_STRATEGY,
+                        "choose how to include statistics from the Hive Metastore when calculating table stats. Valid values are: "
+                                + Joiner.on(", ").join(HiveStatisticsMergeStrategy.values()),
+                        VARCHAR,
+                        HiveStatisticsMergeStrategy.class,
+                        icebergConfig.getHiveStatisticsMergeStrategy(),
+                        false,
+                        val -> HiveStatisticsMergeStrategy.valueOf((String) val),
+                        HiveStatisticsMergeStrategy::name),
+                doubleProperty(STATISTIC_SNAPSHOT_RECORD_DIFFERENCE_WEIGHT,
+                        "the amount that the difference in total record count matters" +
+                                "when calculating the closest snapshot when picking statistics. A " +
+                                "value of 1 means a single record is equivalent to 1 millisecond of " +
+                                "time difference.",
+                        icebergConfig.getStatisticSnapshotRecordDifferenceWeight(),
                         false));
     }
 
@@ -471,5 +493,15 @@ public final class IcebergSessionProperties
     public static boolean isMergeOnReadModeEnabled(ConnectorSession session)
     {
         return session.getProperty(MERGE_ON_READ_MODE_ENABLED, Boolean.class);
+    }
+
+    public static HiveStatisticsMergeStrategy getHiveStatisticsMergeStrategy(ConnectorSession session)
+    {
+        return session.getProperty(HIVE_METASTORE_STATISTICS_MERGE_STRATEGY, HiveStatisticsMergeStrategy.class);
+    }
+
+    public static double getStatisticSnapshotRecordDifferenceWeight(ConnectorSession session)
+    {
+        return session.getProperty(STATISTIC_SNAPSHOT_RECORD_DIFFERENCE_WEIGHT, Double.class);
     }
 }
