@@ -116,3 +116,4 @@ Follow [Release Notes Guidelines](https://github.com/prestodb/presto/wiki/Releas
 [Please join our Slack channel and ask in `#dev`](https://communityinviter.com/apps/prestodb/prestodb).
 
 Commit 1: Test
+Commit 2: Test
