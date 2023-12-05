@@ -139,14 +139,17 @@ folly::SemiFuture<PrestoExchangeSource::Response> PrestoExchangeSource::request(
   // Before calling 'request', the caller should have called
   // 'shouldRequestLocked' and received 'true' response. Hence, we expect
   // requestPending_ == true, atEnd_ == false.
-  // This call cannot be made concurrently from multiple threads.
   VELOX_CHECK(requestPending_);
-  VELOX_CHECK(!promise_.valid() || promise_.isFulfilled());
-
+  // This call cannot be made concurrently from multiple threads, but other
+  // calls that mutate promise_ can be called concurrently.
   auto promise = VeloxPromise<Response>("PrestoExchangeSource::request");
   auto future = promise.getSemiFuture();
+  {
+    std::lock_guard<std::mutex> l(queue_->mutex());
+    VELOX_CHECK(!promise_.valid() || promise_.isFulfilled());
+    promise_ = std::move(promise);
+  }
 
-  promise_ = std::move(promise);
   failedAttempts_ = 0;
   dataRequestRetryState_ =
       RetryState(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -490,6 +493,21 @@ void ConnectionPools::destroy() {
   });
 }
 
+namespace {
+
+std::pair<folly::EventBase*, proxygen::SessionPool*> getSessionPool(
+    ConnectionPools* connectionPools,
+    folly::IOThreadPoolExecutor* ioExecutor,
+    const proxygen::Endpoint& ep) {
+  if (!connectionPools) {
+    return {ioExecutor->getEventBase(), nullptr};
+  }
+  auto& connPool = connectionPools->get(ep, ioExecutor);
+  return {connPool.eventBase, connPool.sessionPool.get()};
+}
+
+} // namespace
+
 // static
 std::shared_ptr<PrestoExchangeSource> PrestoExchangeSource::create(
     const std::string& url,
@@ -498,23 +516,25 @@ std::shared_ptr<PrestoExchangeSource> PrestoExchangeSource::create(
     velox::memory::MemoryPool* memoryPool,
     folly::CPUThreadPoolExecutor* cpuExecutor,
     folly::IOThreadPoolExecutor* ioExecutor,
-    ConnectionPools& connectionPools) {
+    ConnectionPools* connectionPools) {
   folly::Uri uri(url);
   if (uri.scheme() == "http") {
     proxygen::Endpoint ep(uri.host(), uri.port(), false);
-    auto& connPool = connectionPools.get(ep, ioExecutor);
+    auto [eventBase, sessionPool] =
+        getSessionPool(connectionPools, ioExecutor, ep);
     return std::make_shared<PrestoExchangeSource>(
         uri,
         destination,
         queue,
         memoryPool,
         cpuExecutor,
-        connPool.eventBase,
-        connPool.sessionPool.get());
+        eventBase,
+        sessionPool);
   }
   if (uri.scheme() == "https") {
     proxygen::Endpoint ep(uri.host(), uri.port(), true);
-    auto& connPool = connectionPools.get(ep, ioExecutor);
+    auto [eventBase, sessionPool] =
+        getSessionPool(connectionPools, ioExecutor, ep);
     const auto* systemConfig = SystemConfig::instance();
     const auto clientCertAndKeyPath =
         systemConfig->httpsClientCertAndKeyPath().value_or("");
@@ -525,8 +545,8 @@ std::shared_ptr<PrestoExchangeSource> PrestoExchangeSource::create(
         queue,
         memoryPool,
         cpuExecutor,
-        connPool.eventBase,
-        connPool.sessionPool.get(),
+        eventBase,
+        sessionPool,
         clientCertAndKeyPath,
         ciphers);
   }

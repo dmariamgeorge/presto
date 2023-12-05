@@ -63,7 +63,6 @@ import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.ConnectorSplit;
 import com.facebook.presto.spi.ConnectorTableLayoutHandle;
 import com.facebook.presto.spi.PrestoException;
-import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.SplitContext;
 import com.facebook.presto.spi.connector.ConnectorPageSourceProvider;
 import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
@@ -188,7 +187,6 @@ public class IcebergPageSourceProvider
             Path path,
             long start,
             long length,
-            SchemaTableName tableName,
             List<IcebergColumnHandle> regularColumns,
             TupleDomain<IcebergColumnHandle> effectivePredicate,
             FileFormatDataSourceStats fileFormatDataSourceStats,
@@ -651,8 +649,12 @@ public class IcebergPageSourceProvider
             List<ColumnHandle> columns,
             SplitContext splitContext)
     {
-        IcebergSplit split = (IcebergSplit) connectorSplit;
         IcebergTableLayoutHandle icebergLayout = (IcebergTableLayoutHandle) layout;
+        if (icebergLayout.isPushdownFilterEnabled()) {
+            throw new PrestoException(NOT_SUPPORTED, "Filter Pushdown not supported for Iceberg Java Connector");
+        }
+
+        IcebergSplit split = (IcebergSplit) connectorSplit;
         IcebergTableHandle table = icebergLayout.getTable();
 
         List<IcebergColumnHandle> icebergColumns = columns.stream()
@@ -675,12 +677,11 @@ public class IcebergPageSourceProvider
                 split.getStart(),
                 split.getLength(),
                 split.getFileFormat(),
-                table.getSchemaTableName(),
                 regularColumns,
                 table.getPredicate(),
                 splitContext.isCacheable());
 
-        return new IcebergPageSource(icebergColumns, partitionKeys, dataPageSource, session.getSqlFunctionProperties().getTimeZoneKey());
+        return new IcebergPageSource(icebergColumns, partitionKeys, dataPageSource);
     }
 
     private ConnectorPageSource createDataPageSource(
@@ -690,7 +691,6 @@ public class IcebergPageSourceProvider
             long start,
             long length,
             FileFormat fileFormat,
-            SchemaTableName tableName,
             List<IcebergColumnHandle> dataColumns,
             TupleDomain<IcebergColumnHandle> predicate,
             boolean isCacheable)
@@ -704,7 +704,6 @@ public class IcebergPageSourceProvider
                         path,
                         start,
                         length,
-                        tableName,
                         dataColumns,
                         predicate,
                         fileFormatDataSourceStats,

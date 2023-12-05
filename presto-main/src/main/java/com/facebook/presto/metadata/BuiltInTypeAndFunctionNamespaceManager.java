@@ -89,11 +89,20 @@ import com.facebook.presto.operator.aggregation.ReduceAggregationFunction;
 import com.facebook.presto.operator.aggregation.SumDataSizeForStats;
 import com.facebook.presto.operator.aggregation.VarianceAggregation;
 import com.facebook.presto.operator.aggregation.arrayagg.ArrayAggregationFunction;
+import com.facebook.presto.operator.aggregation.arrayagg.SetAggregationFunction;
+import com.facebook.presto.operator.aggregation.arrayagg.SetUnionFunction;
 import com.facebook.presto.operator.aggregation.differentialentropy.DifferentialEntropyAggregation;
 import com.facebook.presto.operator.aggregation.histogram.Histogram;
 import com.facebook.presto.operator.aggregation.multimapagg.AlternativeMultimapAggregationFunction;
 import com.facebook.presto.operator.aggregation.multimapagg.MultimapAggregationFunction;
+import com.facebook.presto.operator.aggregation.noisyaggregation.NoisyApproximateDistinctCountSfmAggregation;
+import com.facebook.presto.operator.aggregation.noisyaggregation.NoisyApproximateDistinctCountSfmAggregationDefaultBucketsPrecision;
+import com.facebook.presto.operator.aggregation.noisyaggregation.NoisyApproximateDistinctCountSfmAggregationDefaultPrecision;
+import com.facebook.presto.operator.aggregation.noisyaggregation.NoisyApproximateSetSfmAggregation;
+import com.facebook.presto.operator.aggregation.noisyaggregation.NoisyApproximateSetSfmAggregationDefaultBucketsPrecision;
+import com.facebook.presto.operator.aggregation.noisyaggregation.NoisyApproximateSetSfmAggregationDefaultPrecision;
 import com.facebook.presto.operator.aggregation.noisyaggregation.NoisyCountIfGaussianAggregation;
+import com.facebook.presto.operator.aggregation.noisyaggregation.SfmSketchMergeAggregation;
 import com.facebook.presto.operator.scalar.ArrayAllMatchFunction;
 import com.facebook.presto.operator.scalar.ArrayAnyMatchFunction;
 import com.facebook.presto.operator.scalar.ArrayCardinalityFunction;
@@ -173,6 +182,7 @@ import com.facebook.presto.operator.scalar.Re2JRegexpReplaceLambdaFunction;
 import com.facebook.presto.operator.scalar.RepeatFunction;
 import com.facebook.presto.operator.scalar.SequenceFunction;
 import com.facebook.presto.operator.scalar.SessionFunctions;
+import com.facebook.presto.operator.scalar.SfmSketchFunctions;
 import com.facebook.presto.operator.scalar.SplitToMapFunction;
 import com.facebook.presto.operator.scalar.SplitToMultimapFunction;
 import com.facebook.presto.operator.scalar.StringFunctions;
@@ -241,6 +251,7 @@ import com.facebook.presto.type.LongEnumOperators;
 import com.facebook.presto.type.MapParametricType;
 import com.facebook.presto.type.QuantileDigestOperators;
 import com.facebook.presto.type.RealOperators;
+import com.facebook.presto.type.SfmSketchOperators;
 import com.facebook.presto.type.SmallintOperators;
 import com.facebook.presto.type.TDigestOperators;
 import com.facebook.presto.type.TimeOperators;
@@ -341,8 +352,6 @@ import static com.facebook.presto.operator.aggregation.TDigestAggregationFunctio
 import static com.facebook.presto.operator.aggregation.TDigestAggregationFunction.TDIGEST_AGG_WITH_WEIGHT;
 import static com.facebook.presto.operator.aggregation.TDigestAggregationFunction.TDIGEST_AGG_WITH_WEIGHT_AND_COMPRESSION;
 import static com.facebook.presto.operator.aggregation.approxmostfrequent.ApproximateMostFrequent.APPROXIMATE_MOST_FREQUENT;
-import static com.facebook.presto.operator.aggregation.arrayagg.SetAggregationFunction.SET_AGG;
-import static com.facebook.presto.operator.aggregation.arrayagg.SetUnionFunction.SET_UNION;
 import static com.facebook.presto.operator.aggregation.minmaxby.AlternativeMaxByAggregationFunction.ALTERNATIVE_MAX_BY;
 import static com.facebook.presto.operator.aggregation.minmaxby.AlternativeMinByAggregationFunction.ALTERNATIVE_MIN_BY;
 import static com.facebook.presto.operator.aggregation.minmaxby.MaxByAggregationFunction.MAX_BY;
@@ -492,6 +501,7 @@ import static com.facebook.presto.type.LikePatternType.LIKE_PATTERN;
 import static com.facebook.presto.type.MapParametricType.MAP;
 import static com.facebook.presto.type.Re2JRegexpType.RE2J_REGEXP;
 import static com.facebook.presto.type.RowParametricType.ROW;
+import static com.facebook.presto.type.SfmSketchType.SFM_SKETCH;
 import static com.facebook.presto.type.TypeUtils.resolveTypes;
 import static com.facebook.presto.type.khyperloglog.KHyperLogLogType.K_HYPER_LOG_LOG;
 import static com.facebook.presto.type.setdigest.SetDigestType.SET_DIGEST;
@@ -614,6 +624,7 @@ public class BuiltInTypeAndFunctionNamespaceManager
         addType(SET_DIGEST);
         addType(K_HYPER_LOG_LOG);
         addType(P4_HYPER_LOG_LOG);
+        addType(SFM_SKETCH);
         addType(JONI_REGEXP);
         addType(RE2J_REGEXP);
         addType(LIKE_PATTERN);
@@ -657,6 +668,12 @@ public class BuiltInTypeAndFunctionNamespaceManager
                 .window(LeadFunction.class)
                 .aggregate(ApproximateCountDistinctAggregation.class)
                 .aggregate(DefaultApproximateCountDistinctAggregation.class)
+                .aggregate(NoisyApproximateSetSfmAggregation.class)
+                .aggregate(NoisyApproximateSetSfmAggregationDefaultBucketsPrecision.class)
+                .aggregate(NoisyApproximateSetSfmAggregationDefaultPrecision.class)
+                .aggregate(NoisyApproximateDistinctCountSfmAggregation.class)
+                .aggregate(NoisyApproximateDistinctCountSfmAggregationDefaultBucketsPrecision.class)
+                .aggregate(NoisyApproximateDistinctCountSfmAggregationDefaultPrecision.class)
                 .aggregate(SumDataSizeForStats.class)
                 .aggregate(MaxDataSizeForStats.class)
                 .aggregate(ConvexHullAggregation.class)
@@ -691,6 +708,7 @@ public class BuiltInTypeAndFunctionNamespaceManager
                 .aggregates(GeometricMeanAggregations.class)
                 .aggregates(RealGeometricMeanAggregations.class)
                 .aggregates(MergeHyperLogLogAggregation.class)
+                .aggregates(SfmSketchMergeAggregation.class)
                 .aggregates(ApproximateSetAggregation.class)
                 .functions(QDIGEST_AGG, QDIGEST_AGG_WITH_WEIGHT, QDIGEST_AGG_WITH_WEIGHT_AND_ERROR)
                 .function(MergeQuantileDigestFunction.MERGE)
@@ -744,6 +762,7 @@ public class BuiltInTypeAndFunctionNamespaceManager
                 .scalars(KdbTreeCasts.class)
                 .scalar(ColorOperators.ColorDistinctFromOperator.class)
                 .scalars(HyperLogLogFunctions.class)
+                .scalars(SfmSketchFunctions.class)
                 .scalars(QuantileDigestFunctions.class)
                 .scalars(UnknownOperators.class)
                 .scalar(UnknownOperators.UnknownDistinctFromOperator.class)
@@ -781,6 +800,7 @@ public class BuiltInTypeAndFunctionNamespaceManager
                 .scalar(TimestampWithTimeZoneOperators.TimestampWithTimeZoneDistinctFromOperator.class)
                 .scalars(DateTimeOperators.class)
                 .scalars(HyperLogLogOperators.class)
+                .scalars(SfmSketchOperators.class)
                 .scalars(QuantileDigestOperators.class)
                 .scalars(IpAddressOperators.class)
                 .scalar(IpAddressOperators.IpAddressDistinctFromOperator.class)
@@ -871,8 +891,8 @@ public class BuiltInTypeAndFunctionNamespaceManager
                 .function(ARRAY_FLATTEN_FUNCTION)
                 .function(ARRAY_CONCAT_FUNCTION)
                 .functions(ARRAY_CONSTRUCTOR, ARRAY_SUBSCRIPT, ARRAY_TO_JSON, JSON_TO_ARRAY, JSON_STRING_TO_ARRAY)
-                .function(SET_AGG)
-                .function(SET_UNION)
+                .aggregate(SetAggregationFunction.class)
+                .aggregate(SetUnionFunction.class)
                 .function(new ArrayAggregationFunction(featuresConfig.isLegacyArrayAgg(), featuresConfig.getArrayAggGroupImplementation()))
                 .functions(new MapSubscriptOperator(featuresConfig.isLegacyMapSubscript()))
                 .functions(MAP_CONSTRUCTOR, MAP_TO_JSON, JSON_TO_MAP, JSON_STRING_TO_MAP)
