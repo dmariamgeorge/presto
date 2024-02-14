@@ -1012,7 +1012,6 @@ public class IcebergDistributedSmokeTestBase
         dropTable(session, tableName);
     }
 
-    @Test
     public void testDatePartitionedByYear()
     {
         Session session = getSession();
@@ -1231,5 +1230,25 @@ public class IcebergDistributedSmokeTestBase
         // Unregister table with procedure
         assertUpdate("CALL system.unregister_table('" + schemaName + "', '" + tableName + "')");
         assertFalse(getQueryRunner().tableExists(getSession(), tableName));
+    }
+
+    @Test
+    public void testColumnNameWithSpace()
+    {
+        String tableName = "test_column_name_with_space";
+        assertUpdate(format("CREATE TABLE %s ('column a' CHAR(5))", tableName));
+        assertUpdate(format("INSERT INTO %s VALUES ('abcde'), ('12345')", tableName), 2);
+        assertQuery(format("SELECT * FROM %s", tableName), "VALUES ('abcde'), ('12345')");
+        dropTable(getSession(), tableName);
+    }
+
+    @Test
+    public void testCharTable()
+    {
+        String tableName = "test_char_table";
+        assertUpdate(format("CREATE TABLE %s (char_column CHAR(5))", tableName));
+        assertUpdate(format("INSERT INTO %s VALUES ('abcde'), ('12345')", tableName), 2);
+        assertQuery(format("SELECT * FROM %s", tableName), "VALUES ('abcde'), ('12345')");
+        dropTable(getSession(), tableName);
     }
 }
