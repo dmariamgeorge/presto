@@ -83,6 +83,18 @@ public class TestingSnowflakeServer
         return 0;
     }
 
+    static void dropTable(String url, String tableName)
+    {
+        String dropTableSQL = "DROP TABLE " + tableName;
+        execute(url, getProperties(), dropTableSQL);
+    }
+
+    static void dropTableIfExists(String url, String tableName)
+    {
+        String dropTableIfExistsSQL = "DROP TABLE IF EXISTS " + tableName;
+        execute(url, getProperties(), dropTableIfExistsSQL);
+    }
+
     static Properties getProperties()
     {
         Properties properties = new Properties();
