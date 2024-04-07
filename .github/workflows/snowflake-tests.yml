@@ -66,4 +66,4 @@ jobs:
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
-        run: mvn test -pl presto-snowflake -Dsnowflake.test.server.url=jdbc:snowflake://${SNOWFLAKE_URL}/ -Dsnowflake.test.server.user=${SNOWFLAKE_USER} -Dsnowflake.test.server.password=${SNOWFLAKE_PASSWORD} -Dsnowflake.test.server.database=${SNOWFLAKE_DATABASE} -Dsnowflake.test.server.role=${SNOWFLAKE_ROLE} -Dsnowflake.test.server.schema=${SNOWFLAKE_SCHEMA}
+        run: mvn test -pl presto-snowflake -Dsnowflake.test.server.url=jdbc:snowflake://${SNOWFLAKE_URL}.snowflakecomputing.com/ -Dsnowflake.test.server.user=${SNOWFLAKE_USER} -Dsnowflake.test.server.password=${SNOWFLAKE_PASSWORD} -Dsnowflake.test.server.database=${SNOWFLAKE_DATABASE} -Dsnowflake.test.server.role=${SNOWFLAKE_ROLE} -Dsnowflake.test.server.schema=${SNOWFLAKE_SCHEMA}
