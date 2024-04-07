@@ -4,6 +4,7 @@ on:
   pull_request:
 
 env:
+  # An envar that signals to tests we are executing in the CI environment
   CONTINUOUS_INTEGRATION: true
   MAVEN_OPTS: "-Xmx1024M -XX:+ExitOnOutOfMemoryError"
   MAVEN_INSTALL_OPTS: "-Xmx2G -XX:+ExitOnOutOfMemoryError"
@@ -14,11 +15,14 @@ env:
 jobs:
   changes:
     runs-on: ubuntu-latest
+    # Required permissions
     permissions:
       pull-requests: read
+    # Set job outputs to values from filter step
     outputs:
       codechange: ${{ steps.filter.outputs.codechange }}
     steps:
+      # For pull requests it's not necessary to checkout the code
       - uses: dorny/paths-filter@v2
         id: filter
         with:
