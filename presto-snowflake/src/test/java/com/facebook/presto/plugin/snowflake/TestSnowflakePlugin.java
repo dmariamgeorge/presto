@@ -21,13 +21,13 @@ import org.testng.annotations.Test;
 
 import static com.google.common.collect.Iterables.getOnlyElement;
 
-public class SnowflakePluginTest
+public class TestSnowflakePlugin
 {
     @Test
     public void testCreateConnector()
     {
         Plugin plugin = new SnowflakePlugin();
         ConnectorFactory factory = getOnlyElement(plugin.getConnectorFactories());
-        factory.create("test", ImmutableMap.of("connection-url", "test"), new TestingConnectorContext());
+        factory.create("test", ImmutableMap.of("connection-url", "jdbc:snowflake://test"), new TestingConnectorContext()).shutdown();
     }
 }
