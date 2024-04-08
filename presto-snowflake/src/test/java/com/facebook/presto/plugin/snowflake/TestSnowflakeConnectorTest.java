@@ -21,12 +21,13 @@ import static com.facebook.presto.plugin.snowflake.TestingSnowflakeServer.dropTa
 import static com.facebook.presto.plugin.snowflake.TestingSnowflakeServer.execute;
 import static com.facebook.presto.plugin.snowflake.TestingSnowflakeServer.executeAndGetCount;
 import static com.facebook.presto.plugin.snowflake.TestingSnowflakeServer.getProperties;
+import static org.testng.Assert.assertEquals;
 
 @Test
 public class TestSnowflakeConnectorTest
 {
     @Test
-    protected void createTableWithDefaultColumns()
+    protected void testCreateTableWithDefaultColumns()
     {
         String url = TEST_URL;
         String tableName = "test_table_create_table_with_default_columns";
@@ -52,6 +53,7 @@ public class TestSnowflakeConnectorTest
         dropTable(url, tableName);
     }
 
+    @Test
     public void testAlterTableRenameColumn()
     {
         String url = TEST_URL;
@@ -84,6 +86,7 @@ public class TestSnowflakeConnectorTest
         dropTable(url, newTableName);
     }
 
+    @Test
     public void testAlterTableAddColumn()
     {
         String url = TEST_URL;
@@ -101,19 +104,23 @@ public class TestSnowflakeConnectorTest
     }
 
     @Test
-    public boolean testAlterTableDropColumn()
+    public void testAlterTableDropColumn()
     {
         String url = TEST_URL;
         String tableName = "test_table_drop_column";
+        String defaultColumnName = "column_default";
         String columnName = "x";
+        String columnType = "INT";
         dropTableIfExists(url, tableName);
-        String createTableSQL = "CREATE TABLE " + tableName + " AS SELECT 123 AS " + columnName;
+        String createTableSQL = "CREATE TABLE " + tableName + " AS SELECT 123 AS " + defaultColumnName;
         execute(url, getProperties(), createTableSQL);
+        String alterTableAddColumnSQL = "ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + columnType;
+        execute(url, getProperties(), alterTableAddColumnSQL);
         String alterTableSQL = "ALTER TABLE " + tableName + " DROP COLUMN " + columnName;
         execute(url, getProperties(), alterTableSQL);
         String checkColumnExistenceSQL = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '" + tableName + "' AND COLUMN_NAME = '" + columnName + "'";
         int count = executeAndGetCount(url, getProperties(), checkColumnExistenceSQL);
         dropTable(url, tableName);
-        return count == 0;
+        assertEquals(count, 0);
     }
 }
