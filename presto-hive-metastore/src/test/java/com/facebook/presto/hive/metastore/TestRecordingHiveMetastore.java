@@ -37,6 +37,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -115,7 +116,8 @@ public class TestRecordingHiveMetastore
             false,
             true,
             0,
-            0);
+            0,
+            Optional.of(new byte[0]));
     private static final PartitionStatistics PARTITION_STATISTICS = new PartitionStatistics(
             new HiveBasicStatistics(10, 11, 10000, 10001),
             ImmutableMap.of("column", new HiveColumnStatistics(
@@ -132,8 +134,8 @@ public class TestRecordingHiveMetastore
                     OptionalLong.of(8))));
     private static final HivePrivilegeInfo PRIVILEGE_INFO = new HivePrivilegeInfo(HivePrivilege.SELECT, true, new PrestoPrincipal(USER, "grantor"), new PrestoPrincipal(USER, "grantee"));
     private static final RoleGrant ROLE_GRANT = new RoleGrant(new PrestoPrincipal(USER, "grantee"), "role", true);
-    private static final PrimaryKeyConstraint<String> TEST_PRIMARY_KEY = new PrimaryKeyConstraint<>("", ImmutableSet.of("column_pk"), true, true);
-    private static final UniqueConstraint<String> TEST_UNIQUE_CONSTRAINT = new UniqueConstraint<>("", ImmutableSet.of("column_unique"), true, true);
+    private static final PrimaryKeyConstraint<String> TEST_PRIMARY_KEY = new PrimaryKeyConstraint<>(Optional.empty(), new LinkedHashSet<>(ImmutableList.of("column_pk")), true, true, false);
+    private static final UniqueConstraint<String> TEST_UNIQUE_CONSTRAINT = new UniqueConstraint<>(Optional.empty(), new LinkedHashSet<>(ImmutableList.of("column_unique")), true, true, false);
 
     @Test
     public void testRecordingHiveMetastore()

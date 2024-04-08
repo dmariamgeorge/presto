@@ -23,7 +23,9 @@ jobs:
           df -h
           sudo apt-get clean
           df -h
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
       - uses: actions/setup-java@v1
         with:
           java-version: 8
@@ -41,6 +43,6 @@ jobs:
       - name: Maven Checks
         run: |
           export MAVEN_OPTS="${MAVEN_INSTALL_OPTS}"
-          ./mvnw install -B -V -T C1 -DskipTests -Dmaven.javadoc.skip=true -P ci -pl '!presto-test-coverage,!:presto-server'
+          ./mvnw install -B -V -T 1C -DskipTests -Dmaven.javadoc.skip=true --no-transfer-progress -P ci -pl '!presto-test-coverage,!:presto-server,!:presto-docs'
       - name: Clean Maven Output
         run: ./mvnw clean -pl '!:presto-server,!:presto-cli,!presto-test-coverage'
