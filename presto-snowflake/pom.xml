@@ -133,7 +133,7 @@
 
     <profiles>
         <profile>
-            <id>ci</id>
+            <id>snowflake-tests</id>
             <build>
                 <plugins>
                     <plugin>
