@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.plugin.snowflake;
 
+import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -24,6 +25,19 @@ import static java.util.Objects.requireNonNull;
 
 public class TestingSnowflakeServer
 {
+    private static final char[] ALPHABET = new char[36];
+
+    static {
+        for (int digit = 0; digit < 10; digit++) {
+            ALPHABET[digit] = (char) ('0' + digit);
+        }
+
+        for (int letter = 0; letter < 26; letter++) {
+            ALPHABET[10 + letter] = (char) ('a' + letter);
+        }
+    }
+    private static final int RANDOM_SUFFIX_LENGTH = 10;
+    private static final SecureRandom random = new SecureRandom();
     public static final String TEST_URL = requireNonNull(System.getProperty("snowflake.test.server.url"), "snowflake.test.server.url is not set");
     public static final String TEST_USER = requireNonNull(System.getProperty("snowflake.test.server.user"), "snowflake.test.server.user is not set");
     public static final String TEST_PASSWORD = requireNonNull(System.getProperty("snowflake.test.server.password"), "snowflake.test.server.password is not set");
@@ -105,5 +119,14 @@ public class TestingSnowflakeServer
         properties.setProperty("role", TEST_ROLE);
         properties.setProperty("schema", TEST_SCHEMA);
         return properties;
+    }
+
+    public static String randomNameSuffix()
+    {
+        char[] chars = new char[RANDOM_SUFFIX_LENGTH];
+        for (int i = 0; i < chars.length; i++) {
+            chars[i] = ALPHABET[random.nextInt(ALPHABET.length)];
+        }
+        return new String(chars);
     }
 }

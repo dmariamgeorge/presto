@@ -21,6 +21,7 @@ import static com.facebook.presto.plugin.snowflake.TestingSnowflakeServer.dropTa
 import static com.facebook.presto.plugin.snowflake.TestingSnowflakeServer.execute;
 import static com.facebook.presto.plugin.snowflake.TestingSnowflakeServer.executeAndGetCount;
 import static com.facebook.presto.plugin.snowflake.TestingSnowflakeServer.getProperties;
+import static com.facebook.presto.plugin.snowflake.TestingSnowflakeServer.randomNameSuffix;
 import static org.testng.Assert.assertEquals;
 
 @Test
@@ -30,7 +31,7 @@ public class TestSnowflakeConnectorTest
     protected void testCreateTableWithDefaultColumns()
     {
         String url = TEST_URL;
-        String tableName = "test_table_create_table_with_default_columns";
+        String tableName = "test_table_create_table_with_default_columns_" + randomNameSuffix();
         dropTableIfExists(url, tableName);
         String createTableWithDefaultColumnSql = "CREATE TABLE " + tableName + " IF NOT EXISTS ( col_required BIGINT NOT NULL, col_nullable BIGINT, " +
                 "col_default BIGINT DEFAULT 43, " +
@@ -44,7 +45,7 @@ public class TestSnowflakeConnectorTest
     public void testInsert()
     {
         String url = TEST_URL;
-        String tableName = "test_table_insert";
+        String tableName = "test_table_insert_" + randomNameSuffix();
         dropTableIfExists(url, tableName);
         String createTableSQL = "CREATE TABLE " + tableName + " AS SELECT 123 x";
         execute(url, getProperties(), createTableSQL);
@@ -57,8 +58,8 @@ public class TestSnowflakeConnectorTest
     public void testAlterTableRenameColumn()
     {
         String url = TEST_URL;
-        String tableName = "test_table_rename_column";
-        String validTargetColumnName = "xyz";
+        String tableName = "test_table_rename_column_" + randomNameSuffix();
+        String validTargetColumnName = "xyz_" + randomNameSuffix();
         dropTableIfExists(url, tableName);
         String createTableSQL = "CREATE TABLE " + tableName + " AS SELECT 123 AS x";
         execute(url, getProperties(), createTableSQL);
@@ -73,8 +74,8 @@ public class TestSnowflakeConnectorTest
     public void testAlterTableRenameTable()
     {
         String url = TEST_URL;
-        String tableName = "test_table_rename";
-        String newTableName = "new_table";
+        String tableName = "test_table_rename_" + randomNameSuffix();
+        String newTableName = "new_table_" + randomNameSuffix();
         dropTableIfExists(url, tableName);
         dropTableIfExists(url, newTableName);
         String createTableSQL = "CREATE TABLE " + tableName + " AS SELECT 123 AS x";
@@ -90,8 +91,8 @@ public class TestSnowflakeConnectorTest
     public void testAlterTableAddColumn()
     {
         String url = TEST_URL;
-        String tableName = "test_table_add_column";
-        String columnName = "new_column";
+        String tableName = "test_table_add_column_" + randomNameSuffix();
+        String columnName = "new_column_" + randomNameSuffix();
         String columnType = "INT";
         dropTableIfExists(url, tableName);
         String createTableSQL = "CREATE TABLE " + tableName + " AS SELECT 123 AS x";
@@ -107,9 +108,9 @@ public class TestSnowflakeConnectorTest
     public void testAlterTableDropColumn()
     {
         String url = TEST_URL;
-        String tableName = "test_table_drop_column";
-        String defaultColumnName = "column_default";
-        String columnName = "x";
+        String tableName = "test_table_drop_column_" + randomNameSuffix();
+        String defaultColumnName = "column_default_" + randomNameSuffix();
+        String columnName = "x_" + randomNameSuffix();
         String columnType = "INT";
         dropTableIfExists(url, tableName);
         String createTableSQL = "CREATE TABLE " + tableName + " AS SELECT 123 AS " + defaultColumnName;
