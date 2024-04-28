@@ -11,30 +11,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.hive.metastore;
+package com.facebook.presto.operator;
 
+import com.facebook.presto.common.Page;
+
+import java.util.Iterator;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
-public class PartitionNameWithVersion
+public class FragmentCacheResult
 {
-    private final String partitionName;
-    private final Optional<Long> partitionVersion;
+    Optional<Iterator<Page>> pages;
+    long inputDataSize;
 
-    public PartitionNameWithVersion(String partitionName, Optional<Long> partitionVersion)
+    public FragmentCacheResult(Optional<Iterator<Page>> pages, long inputDataSize)
     {
-        this.partitionName = requireNonNull(partitionName, "partitionName is null");
-        this.partitionVersion = requireNonNull(partitionVersion, "partitionVersion is null");
+        this.pages = requireNonNull(pages, "pages is null");
+        this.inputDataSize = inputDataSize;
     }
 
-    public String getPartitionName()
+    public Optional<Iterator<Page>> getPages()
     {
-        return partitionName;
+        return pages;
     }
 
-    public Optional<Long> getPartitionVersion()
+    public long getInputDataSize()
     {
-        return partitionVersion;
+        return inputDataSize;
     }
 }

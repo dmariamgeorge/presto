@@ -160,7 +160,7 @@ public class TestFeaturesConfig
                 .setFilterAndProjectMinOutputPageSize(new DataSize(500, KILOBYTE))
                 .setFilterAndProjectMinOutputPageRowCount(256)
                 .setUseMarkDistinct(true)
-                .setExploitConstraints(false)
+                .setExploitConstraints(true)
                 .setPreferPartialAggregation(true)
                 .setPartialAggregationStrategy(PartialAggregationStrategy.ALWAYS)
                 .setPartialAggregationByteReductionThreshold(0.5)
@@ -270,7 +270,8 @@ public class TestFeaturesConfig
                 .setDefaultWriterReplicationCoefficient(3.0)
                 .setDefaultViewSecurityMode(DEFINER)
                 .setCteHeuristicReplicationThreshold(4)
-                .setUseHistograms(false));
+                .setUseHistograms(false)
+                .setLegacyJsonCast(true));
     }
 
     @Test
@@ -377,7 +378,7 @@ public class TestFeaturesConfig
                 .put("arrayagg.implementation", "LEGACY")
                 .put("multimapagg.implementation", "LEGACY")
                 .put("optimizer.use-mark-distinct", "false")
-                .put("optimizer.exploit-constraints", "true")
+                .put("optimizer.exploit-constraints", "false")
                 .put("optimizer.prefer-partial-aggregation", "false")
                 .put("optimizer.partial-aggregation-strategy", "automatic")
                 .put("optimizer.partial-aggregation-byte-reduction-threshold", "0.8")
@@ -454,6 +455,7 @@ public class TestFeaturesConfig
                 .put("optimizer.push-aggregation-below-join-byte-reduction-threshold", "0.9")
                 .put("optimizer.prefilter-for-groupby-limit", "true")
                 .put("field-names-in-json-cast-enabled", "true")
+                .put("legacy-json-cast", "false")
                 .put("optimizer.optimize-probe-for-empty-build-runtime", "true")
                 .put("optimizer.use-defaults-for-correlated-aggregation-pushdown-through-outer-joins", "false")
                 .put("optimizer.merge-duplicate-aggregations", "false")
@@ -584,7 +586,7 @@ public class TestFeaturesConfig
                 .setFilterAndProjectMinOutputPageSize(new DataSize(1, MEGABYTE))
                 .setFilterAndProjectMinOutputPageRowCount(2048)
                 .setUseMarkDistinct(false)
-                .setExploitConstraints(true)
+                .setExploitConstraints(false)
                 .setPreferPartialAggregation(false)
                 .setPartialAggregationStrategy(PartialAggregationStrategy.AUTOMATIC)
                 .setPartialAggregationByteReductionThreshold(0.8)
@@ -696,7 +698,8 @@ public class TestFeaturesConfig
                 .setDefaultWriterReplicationCoefficient(5.0)
                 .setDefaultViewSecurityMode(INVOKER)
                 .setCteHeuristicReplicationThreshold(2)
-                .setUseHistograms(true);
+                .setUseHistograms(true)
+                .setLegacyJsonCast(false);
         assertFullMapping(properties, expected);
     }
 

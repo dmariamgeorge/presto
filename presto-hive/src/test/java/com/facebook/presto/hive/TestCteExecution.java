@@ -72,6 +72,18 @@ public class TestCteExecution
     }
 
     @Test
+    public void testCteExecutionWhereChildPlanRemovedBySimplifyEmptyInputRule()
+    {
+        String sql = "WITH t as(SELECT * FROM orders LEFT JOIN (select orderkey from orders where false) ON TRUE) " +
+                "SELECT * FROM t";
+        QueryRunner queryRunner = getQueryRunner();
+        compareResults(queryRunner.execute(getMaterializedSession(),
+                        sql),
+                queryRunner.execute(getSession(),
+                        sql));
+    }
+
+    @Test
     public void testSimplePersistentCte()
     {
         QueryRunner queryRunner = getQueryRunner();
@@ -1139,6 +1151,20 @@ public class TestCteExecution
                 .setSystemProperty(QUERY_MAX_WRITTEN_INTERMEDIATE_BYTES, "0MB")
                 .build();
         assertQueryFails(session, testQuery, "Query has exceeded WrittenIntermediate Limit of 0MB.*");
+    }
+
+    @Test
+    public void testNestedCteWithSameName()
+    {
+        String testQuery = "with t1 as ( select orderkey k from orders where orderkey > 5), t2 as ( select orderkey k from orders where orderkey < 10 ), t3 as " +
+                "( select t1.k, t2.k from t1 left join t2 on t1.k=t2.k ), t4 as ( with t2 as ( select orderkey k from orders where orderkey > 5 ), " +
+                "t1 as ( select orderkey k from orders where orderkey < 10 ), t3 as ( select t1.k, t2.k from t1 left join t2 on t1.k=t2.k ) select * from t3 ) " +
+                "select * from t3 except select * from t4";
+        QueryRunner queryRunner = getQueryRunner();
+        compareResults(queryRunner.execute(getMaterializedSession(),
+                        testQuery),
+                queryRunner.execute(getSession(),
+                        testQuery));
     }
 
     private void compareResults(MaterializedResult actual, MaterializedResult expected)

@@ -67,6 +67,8 @@ class PeriodicMemoryChecker {
 
   explicit PeriodicMemoryChecker(Config config);
 
+  virtual ~PeriodicMemoryChecker() = default;
+
   /// Starts the 'PeriodicMemoryChecker'. A background scheduler will be
   /// launched to perform the checks. This should only be called once.
   void start();
@@ -77,7 +79,7 @@ class PeriodicMemoryChecker {
  protected:
   /// Returns current system memory usage. The returned value is used to compare
   /// with 'Config::systemMemLimitBytes'.
-  virtual int64_t systemUsedMemoryBytes() const = 0;
+  virtual int64_t systemUsedMemoryBytes() = 0;
 
   /// Returns current bytes allocated by malloc. The returned value is used to
   /// compare with 'Config::mallocBytesUsageDumpThreshold'
@@ -119,7 +121,7 @@ class PeriodicMemoryChecker {
 
   // Invoked by the periodic checker when 'Config::systemMemPushbackEnabled'
   // is true and system memory usage is above 'Config::systemMemLimitBytes'.
-  void pushbackMemory() const;
+  void pushbackMemory();
 
   // Invoked by the periodic checker when 'Config::mallocMemHeapDumpEnabled' is
   // true.

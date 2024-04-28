@@ -31,6 +31,7 @@ import com.facebook.presto.hive.MetastoreClientConfig;
 import com.facebook.presto.hive.authentication.NoHdfsAuthentication;
 import com.facebook.presto.iceberg.delete.DeleteFile;
 import com.facebook.presto.metadata.Metadata;
+import com.facebook.presto.spi.ColumnHandle;
 import com.facebook.presto.spi.Constraint;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.TableHandle;
@@ -633,49 +634,92 @@ public class IcebergDistributedTestBase
     }
 
     @Test
-    public void testReadWriteNDVs()
+    public void testReadWriteStats()
     {
-        assertUpdate("CREATE TABLE test_stat_ndv (col0 int)");
-        assertTrue(getQueryRunner().tableExists(getSession(), "test_stat_ndv"));
-        assertTableColumnNames("test_stat_ndv", "col0");
+        assertUpdate("CREATE TABLE test_stats (col0 int, col1 varchar)");
+        assertTrue(getQueryRunner().tableExists(getSession(), "test_stats"));
+        assertTableColumnNames("test_stats", "col0", "col1");
 
         // test that stats don't exist before analyze
-        TableStatistics stats = getTableStats("test_stat_ndv");
-        assertTrue(stats.getColumnStatistics().isEmpty());
+        Function<Map<ColumnHandle, ColumnStatistics>, Map<String, ColumnStatistics>> remapper = (input) -> input.entrySet().stream().collect(Collectors.toMap(e -> ((IcebergColumnHandle) e.getKey()).getName(), Map.Entry::getValue));
+        Map<String, ColumnStatistics> columnStats;
+        TableStatistics stats = getTableStats("test_stats");
+        columnStats = remapper.apply(stats.getColumnStatistics());
+        assertTrue(columnStats.isEmpty());
 
         // test after simple insert we get a good estimate
-        assertUpdate("INSERT INTO test_stat_ndv VALUES 1, 2, 3", 3);
-        getQueryRunner().execute("ANALYZE test_stat_ndv");
-        stats = getTableStats("test_stat_ndv");
-        assertEquals(stats.getColumnStatistics().values().stream().findFirst().get().getDistinctValuesCount(), Estimate.of(3.0));
+        assertUpdate("INSERT INTO test_stats VALUES (1, 'abc'), (2, 'xyz'), (3, 'lmnopqrst')", 3);
+        getQueryRunner().execute("ANALYZE test_stats");
+        stats = getTableStats("test_stats");
+        columnStats = remapper.apply(stats.getColumnStatistics());
+        ColumnStatistics columnStat = columnStats.get("col0");
+        assertEquals(columnStat.getDistinctValuesCount(), Estimate.of(3.0));
+        assertEquals(columnStat.getDataSize(), Estimate.unknown());
+        columnStat = columnStats.get("col1");
+        assertEquals(columnStat.getDistinctValuesCount(), Estimate.of(3.0));
+        double dataSize = (double) (long) getQueryRunner().execute("SELECT sum_data_size_for_stats(col1) FROM test_stats").getOnlyValue();
+        assertEquals(columnStat.getDataSize().getValue(), dataSize);
 
         // test after inserting the same values, we still get the same estimate
-        assertUpdate("INSERT INTO test_stat_ndv VALUES 1, 2, 3", 3);
-        stats = getTableStats("test_stat_ndv");
-        assertEquals(stats.getColumnStatistics().values().stream().findFirst().get().getDistinctValuesCount(), Estimate.of(3.0));
+        assertUpdate("INSERT INTO test_stats VALUES (1, 'abc'), (2, 'xyz'), (3, 'lmnopqrst')", 3);
+        stats = getTableStats("test_stats");
+        columnStats = remapper.apply(stats.getColumnStatistics());
+        columnStat = columnStats.get("col0");
+        assertEquals(columnStat.getDistinctValuesCount(), Estimate.of(3.0));
+        assertEquals(columnStat.getDataSize(), Estimate.unknown());
+        columnStat = columnStats.get("col1");
+        assertEquals(columnStat.getDistinctValuesCount(), Estimate.of(3.0));
+        assertEquals(columnStat.getDataSize().getValue(), dataSize);
 
-        // test after ANALYZING with the new inserts that the NDV estimate is the same
-        getQueryRunner().execute("ANALYZE test_stat_ndv");
-        stats = getTableStats("test_stat_ndv");
-        assertEquals(stats.getColumnStatistics().values().stream().findFirst().get().getDistinctValuesCount(), Estimate.of(3.0));
+        // test after ANALYZING with the new inserts that the NDV estimate is the same and the data size matches
+        getQueryRunner().execute("ANALYZE test_stats");
+        stats = getTableStats("test_stats");
+        columnStats = remapper.apply(stats.getColumnStatistics());
+        columnStat = columnStats.get("col0");
+        assertEquals(columnStat.getDistinctValuesCount(), Estimate.of(3.0));
+        assertEquals(columnStat.getDataSize(), Estimate.unknown());
+        columnStat = columnStats.get("col1");
+        assertEquals(columnStat.getDistinctValuesCount(), Estimate.of(3.0));
+        dataSize = (double) (long) getQueryRunner().execute("SELECT sum_data_size_for_stats(col1) FROM test_stats").getOnlyValue();
+        assertEquals(columnStat.getDataSize().getValue(), dataSize);
 
         // test after inserting a new value, but not analyzing, the estimate is the same.
-        assertUpdate("INSERT INTO test_stat_ndv VALUES 4", 1);
-        stats = getTableStats("test_stat_ndv");
-        assertEquals(stats.getColumnStatistics().values().stream().findFirst().get().getDistinctValuesCount(), Estimate.of(3.0));
+        assertUpdate("INSERT INTO test_stats VALUES (4, 'def')", 1);
+        stats = getTableStats("test_stats");
+        columnStats = remapper.apply(stats.getColumnStatistics());
+        columnStat = columnStats.get("col0");
+        assertEquals(columnStat.getDistinctValuesCount(), Estimate.of(3.0));
+        assertEquals(columnStat.getDataSize(), Estimate.unknown());
+        columnStat = columnStats.get("col1");
+        assertEquals(columnStat.getDistinctValuesCount(), Estimate.of(3.0));
+        assertEquals(columnStat.getDataSize().getValue(), dataSize);
 
         // test that after analyzing, the updates stats show up.
-        getQueryRunner().execute("ANALYZE test_stat_ndv");
-        stats = getTableStats("test_stat_ndv");
-        assertEquals(stats.getColumnStatistics().values().stream().findFirst().get().getDistinctValuesCount(), Estimate.of(4.0));
+        getQueryRunner().execute("ANALYZE test_stats");
+        stats = getTableStats("test_stats");
+        columnStats = remapper.apply(stats.getColumnStatistics());
+        columnStat = columnStats.get("col0");
+        assertEquals(columnStat.getDistinctValuesCount(), Estimate.of(4.0));
+        assertEquals(columnStat.getDataSize(), Estimate.unknown());
+        columnStat = columnStats.get("col1");
+        assertEquals(columnStat.getDistinctValuesCount(), Estimate.of(4.0));
+        dataSize = (double) (long) getQueryRunner().execute("SELECT sum_data_size_for_stats(col1) FROM test_stats").getOnlyValue();
+        assertEquals(columnStat.getDataSize().getValue(), dataSize);
 
         // test adding a null value is successful, and analyze still runs successfully
-        assertUpdate("INSERT INTO test_stat_ndv VALUES NULL", 1);
-        assertQuerySucceeds("ANALYZE test_stat_ndv");
-        stats = getTableStats("test_stat_ndv");
-        assertEquals(stats.getColumnStatistics().values().stream().findFirst().get().getDistinctValuesCount(), Estimate.of(4.0));
+        assertUpdate("INSERT INTO test_stats VALUES (NULL, NULL)", 1);
+        assertQuerySucceeds("ANALYZE test_stats");
+        stats = getTableStats("test_stats");
+        columnStats = remapper.apply(stats.getColumnStatistics());
+        columnStat = columnStats.get("col0");
+        assertEquals(columnStat.getDistinctValuesCount(), Estimate.of(4.0));
+        assertEquals(columnStat.getDataSize(), Estimate.unknown());
+        columnStat = columnStats.get("col1");
+        assertEquals(columnStat.getDistinctValuesCount(), Estimate.of(4.0));
+        dataSize = (double) (long) getQueryRunner().execute("SELECT sum_data_size_for_stats(col1) FROM test_stats").getOnlyValue();
+        assertEquals(columnStat.getDataSize().getValue(), dataSize);
 
-        assertUpdate("DROP TABLE test_stat_ndv");
+        assertUpdate("DROP TABLE test_stats");
     }
 
     @Test
@@ -817,6 +861,7 @@ public class IcebergDistributedTestBase
     {
         assertUpdate("CREATE TABLE test_stat_data_size (c0 int, c1 bigint, c2 double, c3 decimal(4, 0), c4 varchar, c5 varchar(10), c6 date, c7 time, c8 timestamp, c10 boolean)");
         assertUpdate("INSERT INTO test_stat_data_size VALUES (0, 1, 2.0, CAST(4.01 as decimal(4, 0)), 'testvc', 'testvc10', date '2024-03-14', localtime, localtimestamp, TRUE)", 1);
+        assertQuerySucceeds("ANALYZE test_stat_data_size");
         TableStatistics stats = getTableStats("test_stat_data_size");
         stats.getColumnStatistics().entrySet().stream()
                 .filter((e) -> ((IcebergColumnHandle) e.getKey()).getColumnType() != SYNTHESIZED)
@@ -929,6 +974,46 @@ public class IcebergDistributedTestBase
         return Session.builder(getQueryRunner().getDefaultSession())
                 .setCatalogSessionProperty(ICEBERG_CATALOG, DELETE_AS_JOIN_REWRITE_ENABLED, String.valueOf(joinRewriteEnabled))
                 .build();
+    }
+
+    @Test(dataProvider = "equalityDeleteOptions")
+    public void testEqualityDeleteWithPartitionColumnMissingInSelect(String fileFormat, boolean joinRewriteEnabled)
+            throws Exception
+    {
+        Session session = deleteAsJoinEnabled(joinRewriteEnabled);
+        String tableName = "test_v2_row_delete_" + randomTableSuffix();
+        try {
+            assertUpdate("CREATE TABLE " + tableName + "(a int, b varchar) WITH (format = '" + fileFormat + "', partitioning=ARRAY['a'])");
+            assertUpdate("INSERT INTO " + tableName + " VALUES (1, '1001'), (2, '1002'), (2, '1010'), (3, '1003')", 4);
+
+            Table icebergTable = updateTable(tableName);
+            writeEqualityDeleteToNationTable(icebergTable, ImmutableMap.of("a", 2, "b", "1002"), ImmutableMap.of("a", 2));
+            writeEqualityDeleteToNationTable(icebergTable, ImmutableMap.of("b", "1010"), ImmutableMap.of("a", 2));
+            assertQuery(session, "SELECT b FROM " + tableName, "VALUES ('1001'), ('1003')");
+            assertQuery(session, "SELECT b FROM " + tableName + " WHERE a > 1", "VALUES ('1003')");
+
+            assertUpdate("ALTER TABLE " + tableName + " ADD COLUMN c int WITH (partitioning = 'identity')");
+            assertUpdate("INSERT INTO " + tableName + " VALUES (6, '1004', 1), (6, '1006', 2), (6, '1009', 2)", 3);
+            icebergTable = updateTable(tableName);
+            writeEqualityDeleteToNationTable(icebergTable, ImmutableMap.of("a", 6, "c", 2, "b", "1006"),
+                    ImmutableMap.of("a", 6, "c", 2));
+            writeEqualityDeleteToNationTable(icebergTable, ImmutableMap.of("b", "1009"),
+                    ImmutableMap.of("a", 6, "c", 2));
+            assertQuery(session, "SELECT a, b FROM " + tableName, "VALUES (1, '1001'), (3, '1003'), (6, '1004')");
+            assertQuery(session, "SELECT a, b FROM " + tableName + " WHERE a in (1, 6) and c < 3", "VALUES (6, '1004')");
+
+            assertUpdate("ALTER TABLE " + tableName + " ADD COLUMN d varchar WITH (partitioning = 'truncate(2)')");
+            assertUpdate("INSERT INTO " + tableName + " VALUES (6, '1004', 1, 'th001'), (6, '1006', 2, 'th002'), (6, '1006', 3, 'ti003')", 3);
+            icebergTable = updateTable(tableName);
+            writeEqualityDeleteToNationTable(icebergTable, ImmutableMap.of("a", 6, "c", 1, "d", "th001"),
+                    ImmutableMap.of("a", 6, "c", 1, "d_trunc", "th"));
+            testCheckDeleteFiles(icebergTable, 5, ImmutableList.of(EQUALITY_DELETES, EQUALITY_DELETES, EQUALITY_DELETES, EQUALITY_DELETES, EQUALITY_DELETES));
+            assertQuery(session, "SELECT a, b, d FROM " + tableName, "VALUES (1, '1001', NULL), (3, '1003', NULL), (6, '1004', NULL), (6, '1006', 'th002'), (6, '1006', 'ti003')");
+            assertQuery(session, "SELECT a, b, d FROM " + tableName + " WHERE a in (1, 6) and d > 'th000'", "VALUES (6, '1006', 'th002'), (6, '1006', 'ti003')");
+        }
+        finally {
+            assertUpdate("DROP TABLE IF EXISTS " + tableName);
+        }
     }
 
     @Test(dataProvider = "equalityDeleteOptions")

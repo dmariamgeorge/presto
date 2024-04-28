@@ -39,12 +39,14 @@ class PeriodicMemoryCheckerTest : public testing::Test {
           periodicCb_(std::move(periodicCb)),
           heapDumpCb_(std::move(heapDumpCb)) {}
 
+    ~TestPeriodicMemoryChecker() override {}
+
     void setMallocBytes(int64_t mallocBytes) {
       mallocBytes_ = mallocBytes;
     }
 
    protected:
-    int64_t systemUsedMemoryBytes() const override {
+    int64_t systemUsedMemoryBytes() override {
       return systemUsedMemoryBytes_;
     }
 

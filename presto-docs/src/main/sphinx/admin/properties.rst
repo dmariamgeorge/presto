@@ -201,7 +201,7 @@ Spilling Properties
     This config property can be overridden by the ``order_by_aggregation_spill_enabled`` session property.
 
 ``experimental.window-spill-enabled``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * **Type:** ``boolean``
     * **Default value:** ``true``
@@ -212,7 +212,7 @@ Spilling Properties
     This config property can be overridden by the ``window_spill_enabled`` session property.
 
 ``experimental.order-by-spill-enabled``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * **Type:** ``boolean``
     * **Default value:** ``true``
@@ -284,7 +284,7 @@ Spilling Properties
     is ignored for any other spilling strategy.
 
 ``experimental.max-revocable-memory-per-node``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     * **Type:** ``data size``
     * **Default value:** ``16GB``
 
@@ -305,7 +305,7 @@ Spilling Properties
     cause JVM to pause for lengthy periods, causing queries to fail.
 
 ``experimental.spiller-max-used-space-threshold``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * **Type:** ``double``
     * **Default value:** ``0.9``
@@ -758,7 +758,7 @@ Optimizer Properties
     also be specified on a per-query basis using the ``join_reordering_strategy`` session property.
 
 ``optimizer.max-reordered-joins``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * **Type:** ``integer``
     * **Default value:** ``9``
@@ -819,12 +819,20 @@ Optimizer Properties
 
     Log the stats equivalent plan and canonicalized plans used in history based optimization.
 
+``optimizer.exploit-constraints``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    * **Type:** ``boolean``
+    * **Default value:** ``true``
+
+    Enable analysis and propagation of logical properties like distinct keys or cardinality among the nodes of
+    a query plan. The optimizer may then use these properties to perform various optimizations.
 
 Planner Properties
---------------------------------------
+------------------
 
 ``planner.query-analyzer-timeout``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * **Type:** ``duration``
     * **Default value:** ``3m``
@@ -880,10 +888,10 @@ The following properties allow tuning the :doc:`/functions/regexp`.
     The more rows you are processing, the larger this value should be.
 
 CTE Materialization Properties
---------------------------------------
+------------------------------
 
 ``cte-materialization-strategy``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * **Type:** ``string``
     * **Allowed values:** ``ALL``, ``NONE``
@@ -981,3 +989,16 @@ Logging Properties
     * **Default value:** ``100MB``
 
     The maximum file size for the log file of the HTTP server.
+
+
+Legacy Compatible Properties
+------------------------------
+
+``legacy_json_cast``
+^^^^^^^^^^^^^^^^^^^^^
+
+    * **Type:** ``boolean``
+    * **Default value:** ``true``
+
+    When casting from ``JSON`` to ``ROW``, ignore the case of field names in ``RowType`` for legacy support so that the matching is case-insensitive.
+    Set ``legacy_json_cast`` to ``false`` to strictly enforce the case-sensitivity of double quoted field names in ``RowType`` when matching. Matching for unquoted field names remains case-insensitive.

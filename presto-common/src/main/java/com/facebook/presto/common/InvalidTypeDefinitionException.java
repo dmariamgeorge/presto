@@ -11,27 +11,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.iceberg.util;
+package com.facebook.presto.common;
 
-/**
- * strategies that define how to merge hive column statistics into Iceberg column statistics.
- */
-public enum HiveStatisticsMergeStrategy
+public class InvalidTypeDefinitionException
+        extends RuntimeException
 {
-    /**
-     * Do not merge statistics from Hive
-     */
-    NONE,
-    /**
-     * Only merge NDV statistics from hive
-     */
-    USE_NDV,
-    /**
-     * Only merge null fractions from hive
-     */
-    USE_NULLS_FRACTIONS,
-    /**
-     * Merge both null fractions and NDVs from Hive
-     */
-    USE_NULLS_FRACTION_AND_NDV,
+    public InvalidTypeDefinitionException(String message)
+    {
+        this(message, null);
+    }
+
+    public InvalidTypeDefinitionException(Throwable throwable)
+    {
+        this(null, throwable);
+    }
+
+    public InvalidTypeDefinitionException(String message, Throwable cause)
+    {
+        super(message, cause);
+    }
+
+    @Override
+    public String getMessage()
+    {
+        return super.getMessage();
+    }
 }

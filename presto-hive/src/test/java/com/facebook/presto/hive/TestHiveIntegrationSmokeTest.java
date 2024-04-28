@@ -105,6 +105,7 @@ import static com.facebook.presto.hive.HiveColumnHandle.BUCKET_COLUMN_NAME;
 import static com.facebook.presto.hive.HiveColumnHandle.FILE_MODIFIED_TIME_COLUMN_NAME;
 import static com.facebook.presto.hive.HiveColumnHandle.FILE_SIZE_COLUMN_NAME;
 import static com.facebook.presto.hive.HiveColumnHandle.PATH_COLUMN_NAME;
+import static com.facebook.presto.hive.HiveColumnHandle.ROW_ID_COLUMN_NAME;
 import static com.facebook.presto.hive.HiveQueryRunner.HIVE_CATALOG;
 import static com.facebook.presto.hive.HiveQueryRunner.TPCH_SCHEMA;
 import static com.facebook.presto.hive.HiveQueryRunner.createBucketedSession;
@@ -765,7 +766,7 @@ public class TestHiveIntegrationSmokeTest
                 ORC);
     }
 
-    public void testCreatePartitionedTableAsShuffleOnPartitionColumns(Session session, HiveStorageFormat storageFormat)
+    private void testCreatePartitionedTableAsShuffleOnPartitionColumns(Session session, HiveStorageFormat storageFormat)
     {
         @Language("SQL") String createTable = "" +
                 "CREATE TABLE test_create_partitioned_table_as_shuffle_on_partition_columns " +
@@ -1236,9 +1237,9 @@ public class TestHiveIntegrationSmokeTest
     @Test
     public void testCreateEmptyBucketedPartition()
     {
-        for (TestingHiveStorageFormat storageFormat : getAllTestingHiveStorageFormat()) {
-            testCreateEmptyBucketedPartition(storageFormat.getFormat(), false);
-            testCreateEmptyBucketedPartition(storageFormat.getFormat(), true);
+        for (HiveStorageFormat storageFormat : getSupportedHiveStorageFormats()) {
+            testCreateEmptyBucketedPartition(storageFormat, false);
+            testCreateEmptyBucketedPartition(storageFormat, true);
         }
     }
 
@@ -2842,7 +2843,7 @@ public class TestHiveIntegrationSmokeTest
         TableMetadata tableMetadata = getTableMetadata(catalog, TPCH_SCHEMA, "test_path");
         assertEquals(tableMetadata.getMetadata().getProperties().get(STORAGE_FORMAT_PROPERTY), storageFormat);
 
-        List<String> columnNames = ImmutableList.of("col0", "col1", PATH_COLUMN_NAME, FILE_SIZE_COLUMN_NAME, FILE_MODIFIED_TIME_COLUMN_NAME);
+        List<String> columnNames = ImmutableList.of("col0", "col1", PATH_COLUMN_NAME, FILE_SIZE_COLUMN_NAME, FILE_MODIFIED_TIME_COLUMN_NAME, ROW_ID_COLUMN_NAME);
         List<ColumnMetadata> columnMetadatas = tableMetadata.getColumns();
         assertEquals(columnMetadatas.size(), columnNames.size());
         for (int i = 0; i < columnMetadatas.size(); i++) {
@@ -2900,7 +2901,7 @@ public class TestHiveIntegrationSmokeTest
         assertEquals(tableMetadata.getMetadata().getProperties().get(BUCKETED_BY_PROPERTY), ImmutableList.of("col0"));
         assertEquals(tableMetadata.getMetadata().getProperties().get(BUCKET_COUNT_PROPERTY), 2);
 
-        List<String> columnNames = ImmutableList.of("col0", "col1", PATH_COLUMN_NAME, BUCKET_COLUMN_NAME, FILE_SIZE_COLUMN_NAME, FILE_MODIFIED_TIME_COLUMN_NAME);
+        List<String> columnNames = ImmutableList.of("col0", "col1", PATH_COLUMN_NAME, BUCKET_COLUMN_NAME, FILE_SIZE_COLUMN_NAME, FILE_MODIFIED_TIME_COLUMN_NAME, ROW_ID_COLUMN_NAME);
         List<ColumnMetadata> columnMetadatas = tableMetadata.getColumns();
         assertEquals(columnMetadatas.size(), columnNames.size());
         for (int i = 0; i < columnMetadatas.size(); i++) {
@@ -2908,6 +2909,10 @@ public class TestHiveIntegrationSmokeTest
             assertEquals(columnMetadata.getName(), columnNames.get(i));
             if (columnMetadata.getName().equals(BUCKET_COLUMN_NAME)) {
                 // $bucket_number should be hidden column
+                assertTrue(columnMetadata.isHidden());
+            }
+            else if (columnMetadata.getName().equals(ROW_ID_COLUMN_NAME)) {
+                // $row_id should be hidden column
                 assertTrue(columnMetadata.isHidden());
             }
         }
@@ -2948,7 +2953,7 @@ public class TestHiveIntegrationSmokeTest
 
         TableMetadata tableMetadata = getTableMetadata(catalog, TPCH_SCHEMA, "test_file_size");
 
-        List<String> columnNames = ImmutableList.of("col0", "col1", PATH_COLUMN_NAME, FILE_SIZE_COLUMN_NAME, FILE_MODIFIED_TIME_COLUMN_NAME);
+        List<String> columnNames = ImmutableList.of("col0", "col1", PATH_COLUMN_NAME, FILE_SIZE_COLUMN_NAME, FILE_MODIFIED_TIME_COLUMN_NAME, ROW_ID_COLUMN_NAME);
         List<ColumnMetadata> columnMetadatas = tableMetadata.getColumns();
         assertEquals(columnMetadatas.size(), columnNames.size());
         for (int i = 0; i < columnMetadatas.size(); i++) {
@@ -3000,7 +3005,7 @@ public class TestHiveIntegrationSmokeTest
 
         TableMetadata tableMetadata = getTableMetadata(catalog, TPCH_SCHEMA, "test_file_modified_time");
 
-        List<String> columnNames = ImmutableList.of("col0", "col1", PATH_COLUMN_NAME, FILE_SIZE_COLUMN_NAME, FILE_MODIFIED_TIME_COLUMN_NAME);
+        List<String> columnNames = ImmutableList.of("col0", "col1", PATH_COLUMN_NAME, FILE_SIZE_COLUMN_NAME, FILE_MODIFIED_TIME_COLUMN_NAME, ROW_ID_COLUMN_NAME);
         List<ColumnMetadata> columnMetadatas = tableMetadata.getColumns();
         assertEquals(columnMetadatas.size(), columnNames.size());
         for (int i = 0; i < columnMetadatas.size(); i++) {
@@ -4324,6 +4329,33 @@ public class TestHiveIntegrationSmokeTest
                         formattedPlan));
             }
         };
+    }
+
+    @Test
+    public void testGroupedJoinWithUngroupedSemiJoin()
+    {
+        Session groupedExecutionSession = Session.builder(getSession())
+                .setSystemProperty(COLOCATED_JOIN, "true")
+                .setSystemProperty(GROUPED_EXECUTION, "true")
+                .setSystemProperty(CONCURRENT_LIFESPANS_PER_NODE, "1")
+                .setSystemProperty(JOIN_DISTRIBUTION_TYPE, "AUTOMATIC")
+                .build();
+        try {
+            assertUpdate("CREATE TABLE big_bucketed_table \n" +
+                            "WITH (bucket_count = 16, bucketed_by = ARRAY['key1']) AS\n" +
+                            "SELECT orderkey key1 FROM orders",
+                    15000);
+            assertUpdate("CREATE TABLE small_unbucketed_table AS\n" +
+                            "SELECT nationkey key2 FROM nation",
+                    25);
+            assertQuery(groupedExecutionSession,
+                    "SELECT count(*) from big_bucketed_table t1 JOIN (SELECT key1 FROM big_bucketed_table where key1 IN (SELECT key2 from small_unbucketed_table)) t2 on t1.key1 = t2.key1 group by t1.key1",
+                    "SELECT count(*) from orders where orderkey < 25 group by orderkey");
+        }
+        finally {
+            assertUpdate("DROP TABLE IF EXISTS big_bucketed_table");
+            assertUpdate("DROP TABLE IF EXISTS small_unbucketed_table");
+        }
     }
 
     @Test
@@ -6315,7 +6347,7 @@ public class TestHiveIntegrationSmokeTest
 
         // Negative tests
         assertQueryFails(addPrimaryKeyStmt, format("Primary key already exists for: %s.%s", getSession().getSchema().get(), tableName));
-        assertQueryFails(addUniqueConstraintStmt, format("Constraint already exists: 'uq3'", getSession().getSchema().get(), tableName));
+        assertQueryFails(addUniqueConstraintStmt, format("Constraint already exists: 'uq3'"));
         String dropNonExistentConstraint = format("ALTER TABLE %s.%s.%s DROP CONSTRAINT missingconstraint", getSession().getCatalog().get(), getSession().getSchema().get(), tableName);
         assertQueryFails(dropNonExistentConstraint, "Constraint 'missingconstraint' not found");
 
@@ -6681,21 +6713,19 @@ public class TestHiveIntegrationSmokeTest
 
     private void testWithAllStorageFormats(BiConsumer<Session, HiveStorageFormat> test)
     {
-        for (TestingHiveStorageFormat storageFormat : getAllTestingHiveStorageFormat()) {
-            testWithStorageFormat(storageFormat, test);
+        Session session = getSession();
+        for (HiveStorageFormat storageFormat : getSupportedHiveStorageFormats()) {
+            testWithStorageFormat(session, storageFormat, test);
         }
     }
 
-    private static void testWithStorageFormat(TestingHiveStorageFormat storageFormat, BiConsumer<Session, HiveStorageFormat> test)
+    private static void testWithStorageFormat(Session session, HiveStorageFormat storageFormat, BiConsumer<Session, HiveStorageFormat> test)
     {
-        requireNonNull(storageFormat, "storageFormat is null");
-        requireNonNull(test, "test is null");
-        Session session = storageFormat.getSession();
         try {
-            test.accept(session, storageFormat.getFormat());
+            test.accept(session, storageFormat);
         }
         catch (Exception | AssertionError e) {
-            fail(format("Failure for format %s with properties %s", storageFormat.getFormat(), session.getConnectorProperties()), e);
+            fail(format("Failure for format %s with properties %s", storageFormat, session.getConnectorProperties()), e);
         }
     }
 
@@ -6705,35 +6735,5 @@ public class TestHiveIntegrationSmokeTest
         return Arrays.stream(HiveStorageFormat.values())
                 .filter(format -> format != HiveStorageFormat.CSV && format != HiveStorageFormat.ALPHA)
                 .collect(toImmutableList());
-    }
-
-    private List<TestingHiveStorageFormat> getAllTestingHiveStorageFormat()
-    {
-        Session session = getSession();
-        return getSupportedHiveStorageFormats().stream()
-                .map(format -> new TestingHiveStorageFormat(session, format))
-                .collect(toImmutableList());
-    }
-
-    private static class TestingHiveStorageFormat
-    {
-        private final Session session;
-        private final HiveStorageFormat format;
-
-        TestingHiveStorageFormat(Session session, HiveStorageFormat format)
-        {
-            this.session = requireNonNull(session, "session is null");
-            this.format = requireNonNull(format, "format is null");
-        }
-
-        public Session getSession()
-        {
-            return session;
-        }
-
-        public HiveStorageFormat getFormat()
-        {
-            return format;
-        }
     }
 }

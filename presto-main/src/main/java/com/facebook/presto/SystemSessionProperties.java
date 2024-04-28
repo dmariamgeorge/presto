@@ -74,7 +74,6 @@ import static com.facebook.presto.spi.session.PropertyMetadata.stringProperty;
 import static com.facebook.presto.sql.analyzer.FeaturesConfig.JoinDistributionType.BROADCAST;
 import static com.facebook.presto.sql.analyzer.FeaturesConfig.JoinDistributionType.PARTITIONED;
 import static com.facebook.presto.sql.analyzer.FeaturesConfig.JoinReorderingStrategy.ELIMINATE_CROSS_JOINS;
-import static com.facebook.presto.sql.analyzer.FeaturesConfig.JoinReorderingStrategy.NONE;
 import static com.facebook.presto.sql.analyzer.FeaturesConfig.PartialAggregationStrategy.ALWAYS;
 import static com.facebook.presto.sql.analyzer.FeaturesConfig.PartialAggregationStrategy.NEVER;
 import static com.google.common.base.Preconditions.checkArgument;
@@ -312,6 +311,7 @@ public final class SystemSessionProperties
     public static final String ADD_PARTIAL_NODE_FOR_ROW_NUMBER_WITH_LIMIT = "add_partial_node_for_row_number_with_limit";
     public static final String REWRITE_CASE_TO_MAP_ENABLED = "rewrite_case_to_map_enabled";
     public static final String FIELD_NAMES_IN_JSON_CAST_ENABLED = "field_names_in_json_cast_enabled";
+    public static final String LEGACY_JSON_CAST = "legacy_json_cast";
     public static final String PULL_EXPRESSION_FROM_LAMBDA_ENABLED = "pull_expression_from_lambda_enabled";
     public static final String REWRITE_CONSTANT_ARRAY_CONTAINS_TO_IN_EXPRESSION = "rewrite_constant_array_contains_to_in_expression";
     public static final String INFER_INEQUALITY_PREDICATES = "infer_inequality_predicates";
@@ -1688,7 +1688,7 @@ public final class SystemSessionProperties
                         false),
                 new PropertyMetadata<>(
                         RANDOMIZE_OUTER_JOIN_NULL_KEY_STRATEGY,
-                        format("When to apply randomization to join keys in outer joins to mitigate null skew",
+                        format("When to apply randomization to join keys in outer joins to mitigate null skew. Value must be one of: %s",
                                 Stream.of(RandomizeOuterJoinNullKeyStrategy.values())
                                         .map(RandomizeOuterJoinNullKeyStrategy::name)
                                         .collect(joining(","))),
@@ -1700,12 +1700,12 @@ public final class SystemSessionProperties
                         RandomizeOuterJoinNullKeyStrategy::name),
                 doubleProperty(
                         RANDOMIZE_OUTER_JOIN_NULL_KEY_NULL_RATIO_THRESHOLD,
-                        "Enable randomizing null join key for outer join when ratio of null join keys exceed the threshold",
+                        "Enable randomizing null join key for outer join when ratio of null join keys exceeds the threshold",
                         0.02,
                         false),
                 new PropertyMetadata<>(
                         SHARDED_JOINS_STRATEGY,
-                        format("When to shard joins to mitigate skew",
+                        format("When to shard joins to mitigate skew. Value must be one of: %s",
                                 Stream.of(ShardedJoinStrategy.values())
                                         .map(ShardedJoinStrategy::name)
                                         .collect(joining(","))),
@@ -1755,6 +1755,11 @@ public final class SystemSessionProperties
                         featuresConfig.isFieldNamesInJsonCastEnabled(),
                         false),
                 booleanProperty(
+                        LEGACY_JSON_CAST,
+                        "Keep the legacy json cast behavior, do not reserve the case for field names when casting to row type",
+                        featuresConfig.isLegacyJsonCast(),
+                        false),
+                booleanProperty(
                         OPTIMIZE_JOIN_PROBE_FOR_EMPTY_BUILD_RUNTIME,
                         "Optimize join probe at runtime if build side is empty",
                         featuresConfig.isOptimizeJoinProbeForEmptyBuildRuntimeEnabled(),
@@ -1781,7 +1786,7 @@ public final class SystemSessionProperties
                         false),
                 new PropertyMetadata<>(
                         PUSH_DOWN_FILTER_EXPRESSION_EVALUATION_THROUGH_CROSS_JOIN,
-                        format("Push down expression evaluation in filter through cross join",
+                        format("Push down expression evaluation in filter through cross join %s",
                                 Stream.of(PushDownFilterThroughCrossJoinStrategy.values())
                                         .map(PushDownFilterThroughCrossJoinStrategy::name)
                                         .collect(joining(","))),
@@ -2029,7 +2034,7 @@ public final class SystemSessionProperties
 
     public static boolean isCteMaterializationApplicable(Session session)
     {
-        boolean isStrategyNone = getCteMaterializationStrategy(session).equals(NONE);
+        boolean isStrategyNone = getCteMaterializationStrategy(session) == CteMaterializationStrategy.NONE;
         boolean hasMaterializedCTE = session.getCteInformationCollector().getCTEInformationList()
                 .stream()
                 .anyMatch(CTEInformation::isMaterialized);
@@ -2195,7 +2200,7 @@ public final class SystemSessionProperties
         Boolean reorderJoins = session.getSystemProperty(REORDER_JOINS, Boolean.class);
         if (reorderJoins != null) {
             if (!reorderJoins) {
-                return NONE;
+                return JoinReorderingStrategy.NONE;
             }
             return ELIMINATE_CROSS_JOINS;
         }

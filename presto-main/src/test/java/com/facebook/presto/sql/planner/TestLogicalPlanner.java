@@ -23,6 +23,7 @@ import com.facebook.presto.spi.plan.FilterNode;
 import com.facebook.presto.spi.plan.LimitNode;
 import com.facebook.presto.spi.plan.PlanNode;
 import com.facebook.presto.spi.plan.ProjectNode;
+import com.facebook.presto.spi.plan.SortNode;
 import com.facebook.presto.spi.plan.TableScanNode;
 import com.facebook.presto.spi.plan.TopNNode;
 import com.facebook.presto.spi.plan.ValuesNode;
@@ -41,7 +42,6 @@ import com.facebook.presto.sql.planner.plan.IndexJoinNode;
 import com.facebook.presto.sql.planner.plan.JoinNode;
 import com.facebook.presto.sql.planner.plan.LateralJoinNode;
 import com.facebook.presto.sql.planner.plan.SemiJoinNode;
-import com.facebook.presto.sql.planner.plan.SortNode;
 import com.facebook.presto.sql.planner.plan.StatisticsWriterNode;
 import com.facebook.presto.sql.tree.LongLiteral;
 import com.facebook.presto.testing.QueryRunner;
@@ -1399,6 +1399,21 @@ public class TestLogicalPlanner
                         "    COUNT(*), " +
                         "    SUM(REDUCE(col1, ROW(0),(l, r) -> l, x -> 1)) " +
                         "  )",
+                output(aggregation(ImmutableMap.of(),
+                        values())));
+
+        Session session = Session.builder(this.getQueryRunner().getDefaultSession())
+                .setSystemProperty(EXPLOIT_CONSTRAINTS, Boolean.toString(false))
+                .build();
+        assertDistributedPlan("SELECT COUNT(*) " +
+                        "FROM (values ARRAY['a', 'b']) as t(col1) " +
+                        "ORDER BY " +
+                        "  IF( " +
+                        "    SUM(REDUCE(col1, ROW(0),(l, r) -> l, x -> 1)) > 0, " +
+                        "    COUNT(*), " +
+                        "    SUM(REDUCE(col1, ROW(0),(l, r) -> l, x -> 1)) " +
+                        "  )",
+                session,
                 output(
                         project(
                                 exchange(
