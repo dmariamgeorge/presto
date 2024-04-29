@@ -13,6 +13,8 @@
  */
 package com.facebook.presto.plugin.snowflake;
 
+import com.facebook.airlift.log.Logger;
+
 import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -20,11 +22,14 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
+import java.util.concurrent.ThreadLocalRandom;
 
+import static java.lang.Thread.sleep;
 import static java.util.Objects.requireNonNull;
 
 public class TestingSnowflakeServer
 {
+    private static final Logger logger = Logger.get(TestingSnowflakeServer.class);
     private static final char[] ALPHABET = new char[36];
 
     static {
@@ -54,11 +59,11 @@ public class TestingSnowflakeServer
 
     static void execute(String url, Properties properties, String sql)
     {
-        try (Connection connection = DriverManager.getConnection(url, properties);
+        try (Connection connection = getConnection(url, properties);
                 Statement statement = connection.createStatement()) {
             statement.execute(sql);
         }
-        catch (SQLException e) {
+        catch (SQLException | InterruptedException e) {
             e.printStackTrace(System.err);
             if (e.getCause() != null) {
                 e.getCause().printStackTrace(System.err);
@@ -66,35 +71,38 @@ public class TestingSnowflakeServer
             throw new RuntimeException(e);
         }
     }
-
-    static void executeUpdate(String url, Properties properties, String sql)
-    {
-        try (Connection connection = DriverManager.getConnection(url, properties);
-                Statement statement = connection.createStatement()) {
-            statement.executeUpdate(sql);
-        }
-        catch (SQLException e) {
-            e.printStackTrace(System.err);
-            if (e.getCause() != null) {
-                e.getCause().printStackTrace(System.err);
-            }
-            throw new RuntimeException(e);
-        }
-    }
-
     static int executeAndGetCount(String url, Properties properties, String query)
     {
-        try (Connection connection = DriverManager.getConnection(url, properties);
+        try (Connection connection = getConnection(url, properties);
                 Statement statement = connection.createStatement();
                 ResultSet resultSet = statement.executeQuery(query)) {
             if (resultSet.next()) {
                 return resultSet.getInt(1);
             }
         }
-        catch (SQLException e) {
+        catch (SQLException | InterruptedException e) {
             e.printStackTrace();
         }
         return 0;
+    }
+
+    static Connection getConnection(String url, Properties properties) throws SQLException, InterruptedException
+    {
+        for (int retries = 0; retries < 5; retries++) {
+            try {
+                return DriverManager.getConnection(url, properties);
+            }
+            catch (SQLException e) {
+                e.printStackTrace(System.err);
+                if (retries < 4) {
+                    logger.info(e + " Failed to establish connection after " + (retries + 1) + " retry attempt(s).");
+                }
+                //sleep between retries
+                sleep(ThreadLocalRandom.current().nextLong(1000) * (retries + 1));
+                logger.info("Retrying");
+            }
+        }
+        throw new SQLException("Failed to establish connection after all retry attempts");
     }
 
     static void dropTable(String url, String tableName)
@@ -108,7 +116,6 @@ public class TestingSnowflakeServer
         String dropTableIfExistsSQL = "DROP TABLE IF EXISTS " + tableName;
         execute(url, getProperties(), dropTableIfExistsSQL);
     }
-
     static Properties getProperties()
     {
         Properties properties = new Properties();
