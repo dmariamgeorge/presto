@@ -109,23 +109,20 @@
 
     <profiles>
         <profile>
-            <id>snowflake-tests</id>
+            <id>skip-snowflake-tests</id>
             <build>
                 <plugins>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
-                            <includes>
-                                <include>**/TestSnowflakeConnectorTest.java</include>
-                            </includes>
+                            <skipTests>true</skipTests>
                         </configuration>
                     </plugin>
                 </plugins>
             </build>
         </profile>
     </profiles>
-
     <build>
         <plugins>
             <plugin>
@@ -136,15 +133,6 @@
                         <ignoredClassPattern>META-INF.versions.9.module-info</ignoredClassPattern>
                         <ignoredClassPattern> module-info</ignoredClassPattern>
                     </ignoredClassPatterns>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>**/TestSnowflakeConnectorTest.java</exclude>
-                    </excludes>
                 </configuration>
             </plugin>
         </plugins>
