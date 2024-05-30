@@ -1,0 +1,69 @@
+name: Snowflake Tests
+
+on:
+  pull_request:
+
+env:
+  # An envar that signals to tests we are executing in the CI environment
+  CONTINUOUS_INTEGRATION: true
+  MAVEN_OPTS: "-Xmx1024M -XX:+ExitOnOutOfMemoryError"
+  MAVEN_INSTALL_OPTS: "-Xmx2G -XX:+ExitOnOutOfMemoryError"
+  MAVEN_FAST_INSTALL: "-B -V --quiet -T 1C -DskipTests -Dair.check.skip-all -Dmaven.javadoc.skip=true"
+  MAVEN_TEST: "-B -Dair.check.skip-all -Dmaven.javadoc.skip=true -DLogTestDurationListener.enabled=true --fail-at-end"
+  RETRY: .github/bin/retry
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    # Required permissions
+    permissions:
+      pull-requests: read
+    # Set job outputs to values from filter step
+    outputs:
+      codechange: ${{ steps.filter.outputs.codechange }}
+    steps:
+      # For pull requests it's not necessary to checkout the code
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            codechange:
+              - '!presto-docs/**'
+
+  snowflake-tests:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.codechange == 'true'
+    timeout-minutes: 60
+    concurrency:
+      group: ${{ github.workflow }}-snowflake-tests-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v1
+        with:
+          java-version: 8
+      - name: Cache local Maven repository
+        id: cache-maven
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-2-
+      - name: Populate Maven cache
+        if: steps.cache-maven.outputs.cache-hit != 'true'
+        run: ./mvnw de.qaware.maven:go-offline-maven-plugin:resolve-dependencies
+      - name: Install Presto Snowflake Module
+        run: |
+          export MAVEN_OPTS="${MAVEN_INSTALL_OPTS}"
+          ./mvnw install ${MAVEN_FAST_INSTALL} -am -pl :presto-snowflake
+      - name: Run Presto Snowflake Tests
+        env:
+          SNOWFLAKE_URL: ${{ secrets.SNOWFLAKE_URL }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
+        run: mvn test -pl presto-snowflake -Dsnowflake.test.server.url=jdbc:snowflake://${SNOWFLAKE_URL}.snowflakecomputing.com/ -Dsnowflake.test.server.user=${SNOWFLAKE_USER} -Dsnowflake.test.server.password=${SNOWFLAKE_PASSWORD} -Dsnowflake.test.server.database=${SNOWFLAKE_DATABASE} -Dsnowflake.test.server.role=${SNOWFLAKE_ROLE} -Dsnowflake.test.server.schema=${SNOWFLAKE_SCHEMA}
