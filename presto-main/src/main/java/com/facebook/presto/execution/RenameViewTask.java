@@ -30,9 +30,9 @@ import java.util.Optional;
 
 import static com.facebook.presto.metadata.MetadataUtil.createQualifiedObjectName;
 import static com.facebook.presto.sql.analyzer.SemanticErrorCode.MISSING_CATALOG;
-import static com.facebook.presto.sql.analyzer.SemanticErrorCode.MISSING_TABLE;
+import static com.facebook.presto.sql.analyzer.SemanticErrorCode.MISSING_VIEW;
 import static com.facebook.presto.sql.analyzer.SemanticErrorCode.NOT_SUPPORTED;
-import static com.facebook.presto.sql.analyzer.SemanticErrorCode.TABLE_ALREADY_EXISTS;
+import static com.facebook.presto.sql.analyzer.SemanticErrorCode.VIEW_ALREADY_EXISTS;
 import static com.google.common.util.concurrent.Futures.immediateFuture;
 
 public class RenameViewTask
@@ -51,7 +51,7 @@ public class RenameViewTask
         Optional<ViewDefinition> view = metadata.getMetadataResolver(session).getView(viewName);
         if (!view.isPresent()) {
             if (!statement.isExists()) {
-                throw new SemanticException(MISSING_TABLE, statement, "View '%s' does not exist", viewName);
+                throw new SemanticException(MISSING_VIEW, statement, "View '%s' does not exist", viewName);
             }
             return immediateFuture(null);
         }
@@ -61,7 +61,7 @@ public class RenameViewTask
             throw new SemanticException(MISSING_CATALOG, statement, "Target catalog '%s' does not exist", target.getCatalogName());
         }
         if (metadata.getMetadataResolver(session).getView(target).isPresent()) {
-            throw new SemanticException(TABLE_ALREADY_EXISTS, statement, "Target view '%s' already exists", target);
+            throw new SemanticException(VIEW_ALREADY_EXISTS, statement, "Target view '%s' already exists", target);
         }
         if (!viewName.getCatalogName().equals(target.getCatalogName())) {
             throw new SemanticException(NOT_SUPPORTED, statement, "View rename across catalogs is not supported");

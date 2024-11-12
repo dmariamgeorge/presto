@@ -1190,6 +1190,15 @@ The table is partitioned by the transformed value of the column::
 
      ALTER TABLE iceberg.web.page_views ADD COLUMN ts timestamp WITH (partitioning = 'hour');
 
+ALTER VIEW
+^^^^^^^^^^
+
+Alter view operations to alter the name of an existing view to a new name is supported in the Iceberg connector::
+
+.. code-block:: sql
+
+    ALTER VIEW iceberg.web.page_views RENAME TO iceberg.web.page_new_views;
+
 TRUNCATE
 ^^^^^^^^
 

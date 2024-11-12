@@ -1509,6 +1509,7 @@ public class TestSqlParser
     public void testRenameView()
     {
         assertStatement("ALTER VIEW a RENAME TO b", new RenameView(QualifiedName.of("a"), QualifiedName.of("b"), false));
+        assertStatement("ALTER VIEW IF EXISTS a RENAME TO b", new RenameView(QualifiedName.of("a"), QualifiedName.of("b"), true));
     }
 
     @Test
